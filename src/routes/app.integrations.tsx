@@ -126,7 +126,10 @@ function IntegrationsPage() {
     void syncAccounts({ data: { workspaceId: workspace.id } })
       .then((r) => {
         setScopeWarnings(r.warnings ?? []);
-        const done = qc.invalidateQueries({ queryKey: ["integrations", workspace.id] });
+        const done = Promise.all([
+          qc.invalidateQueries({ queryKey: ["integrations", workspace.id] }),
+          qc.invalidateQueries({ queryKey: ["pipedream-accounts", workspace.id] }),
+        ]);
         if (backTo && !(r.warnings ?? []).length) {
           const to = backTo;
           setBackTo(null);
@@ -149,6 +152,7 @@ function IntegrationsPage() {
       const r = await syncAccounts({ data: { workspaceId: workspace.id } });
       setScopeWarnings(r.warnings ?? []);
       void qc.invalidateQueries({ queryKey: ["integrations", workspace.id] });
+      void qc.invalidateQueries({ queryKey: ["pipedream-accounts", workspace.id] });
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذّرت مزامنة الحسابات");
     } finally {

@@ -187,6 +187,9 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
     for (const row of stored ?? []) {
       if (liveIds.has(row.account_id)) continue;
       await admin.from("pipedream_accounts").delete().eq("id", row.id);
+      // قد يكون هذا حساباً قديماً أُعيد ربطه بحساب جديد لنفس المنصة؛ لا نمسح
+      // حالة الربط التي حفظها الحساب الجديد أثناء نفس المزامنة.
+      if (seen.includes(row.provider)) continue;
       await admin
         .from("integrations")
         .update({ status: "disconnected", account: null })

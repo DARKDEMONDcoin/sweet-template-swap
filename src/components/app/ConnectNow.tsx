@@ -17,6 +17,8 @@ type Props = {
   label?: string;
   className?: string;
   size?: "sm" | "md";
+  /** يكمل النشر فور العودة من الربط عندما كان هذا هو الأمر الصريح للمستخدم. */
+  publishAfterConnect?: boolean;
 };
 
 /**
@@ -24,7 +26,14 @@ type Props = {
  * المنصة) بدل رميه في صفحة التكاملات ليبحث عنها بنفسه. وبعد نجاح الربط يعود
  * إلى الصفحة التي كان فيها.
  */
-export function ConnectNow({ workspaceId, provider, label, className, size = "md" }: Props) {
+export function ConnectNow({
+  workspaceId,
+  provider,
+  label,
+  className,
+  size = "md",
+  publishAfterConnect = false,
+}: Props) {
   const navigate = useNavigate();
   const startConnect = useServerFn(startPipedreamConnect);
   const [busy, setBusy] = useState(false);
@@ -38,12 +47,19 @@ export function ConnectNow({ workspaceId, provider, label, className, size = "md
     }
     setBusy(true);
     try {
+      if (publishAfterConnect) {
+        sessionStorage.setItem(
+          `publish-after-connect:${workspaceId}`,
+          JSON.stringify({ provider, createdAt: Date.now() }),
+        );
+      }
       const back = `${window.location.pathname}${window.location.search}`;
       const { url } = await startConnect({
         data: { workspaceId, provider, origin: window.location.origin, returnTo: back },
       });
       window.location.href = url;
     } catch (e) {
+      if (publishAfterConnect) sessionStorage.removeItem(`publish-after-connect:${workspaceId}`);
       setError(e instanceof Error ? e.message : "تعذّر بدء الربط");
       setBusy(false);
     }
