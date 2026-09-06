@@ -4,7 +4,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { Link2, Loader2 } from "lucide-react";
 
 import { AppIcon, appLabel } from "@/components/site/AppIcon";
-import { isPipedreamProvider, startPipedreamConnect } from "@/lib/pipedream.functions";
+import { isPipedreamProvider } from "@/data/pipedream-apps";
+import { startPipedreamConnect } from "@/lib/pipedream.functions";
 
 /** منصات تُربط بنموذج داخلي على صفحة التكاملات (مفتاح/رابط بدل OAuth الوسيط). */
 const DIALOG_PROVIDERS = new Set(["wordpress", "indexnow", "shopify", "webflow", "ghost"]);
