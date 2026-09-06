@@ -196,7 +196,7 @@ export const askEmployee = createServerFn({ method: "POST" })
         : "",
       craft[data.employeeId] ? `## معايير حِرفتك\n${craft[data.employeeId]}` : "",
       qualityCriteria[data.employeeId]?.length
-        ? `## معايير قبول الرد\n${qualityCriteria[data.employeeId].map((criterion, index) => `${index + 1}) ${criterion}`).join("\n")}`
+        ? `## معايير قبول الرد\n${(qualityCriteria[data.employeeId] ?? []).map((criterion, index) => `${index + 1}) ${criterion}`).join("\n")}`
         : "",
       ...sharedSystemBlocks({
         employeeId: data.employeeId,
