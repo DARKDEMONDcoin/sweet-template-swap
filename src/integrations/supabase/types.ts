@@ -414,7 +414,9 @@ export type Database = {
           connected_at: string
           healthy: boolean
           id: string
+          instagram_business_id: string | null
           last_error: string | null
+          page_id: string | null
           provider: string
           status: string
           updated_at: string
@@ -427,7 +429,9 @@ export type Database = {
           connected_at?: string
           healthy?: boolean
           id?: string
+          instagram_business_id?: string | null
           last_error?: string | null
+          page_id?: string | null
           provider: string
           status?: string
           updated_at?: string
@@ -440,7 +444,9 @@ export type Database = {
           connected_at?: string
           healthy?: boolean
           id?: string
+          instagram_business_id?: string | null
           last_error?: string | null
+          page_id?: string | null
           provider?: string
           status?: string
           updated_at?: string
