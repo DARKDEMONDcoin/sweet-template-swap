@@ -29,6 +29,7 @@ const input = z.object({
   workspaceId: z.string().uuid(),
   employeeId: z.string().min(1),
   message: z.string().min(1).max(4000),
+  conversationId: z.string().uuid(),
 });
 
 /** الموظفون الذين تُولَّد لهم صورة فعلية عند وجود وصف بصري في الرد. */
@@ -46,15 +47,18 @@ export const askEmployee = createServerFn({ method: "POST" })
     const persona = personas[data.employeeId];
     if (!persona) throw new Error("موظف غير معروف.");
 
-    const [{ data: workspace }, { data: brain }, { data: history }, { data: linked }, { data: direct }, { data: recentTasks }] =
+    const [{ data: workspace }, { data: conversation }, { data: brain }, { data: durable }, { data: history }, { data: linked }, { data: direct }, { data: recentTasks }] =
       await Promise.all([
         supabase.from("workspaces").select("*").eq("id", data.workspaceId).maybeSingle(),
+        supabase.from("conversations").select("id, title").eq("id", data.conversationId).eq("workspace_id", data.workspaceId).eq("employee_id", data.employeeId).maybeSingle(),
         supabase.from("brain_items").select("title, body, kind").eq("workspace_id", data.workspaceId),
+        supabase.from("brand_memories").select("content, kind").eq("workspace_id", data.workspaceId).is("superseded_by", null).or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`).order("updated_at", { ascending: false }).limit(80),
         supabase
           .from("messages")
           .select("role, body")
           .eq("workspace_id", data.workspaceId)
           .eq("employee_id", data.employeeId)
+          .eq("conversation_id", data.conversationId)
           .order("created_at", { ascending: false })
           .limit(12),
         supabase
@@ -82,22 +86,41 @@ export const askEmployee = createServerFn({ method: "POST" })
     ];
 
     if (!workspace) throw new Error("مساحة العمل غير موجودة.");
+    if (!conversation) throw new Error("المحادثة غير موجودة.");
     const ws = workspace as typeof workspace & {
       profile?: unknown;
       website?: string | null;
       country?: string | null;
     };
 
-    const { error: insertUserError } = await supabase.from("messages").insert({
+    const { data: userRow, error: insertUserError } = await supabase.from("messages").insert({
       workspace_id: data.workspaceId,
       employee_id: data.employeeId,
       role: "user",
       body: data.message,
-    });
+      conversation_id: data.conversationId,
+    }).select("id").single();
     if (insertUserError) throw new Error(insertUserError.message);
 
-    const { memoryBlock } = await import("./memory.server");
-    const brainText = memoryBlock(brain ?? [], data.message, 8);
+    const { durableMemoryItems, extractExplicitMemories, memoryBlock } = await import("./memory.server");
+    const brainText = memoryBlock([...(brain ?? []), ...durableMemoryItems(durable ?? [])], data.message, 10);
+    const extracted = extractExplicitMemories(data.message);
+    if (extracted.length) {
+      await supabase.from("brand_memories").insert(extracted.map((item) => ({
+        workspace_id: data.workspaceId,
+        conversation_id: data.conversationId,
+        employee_id: data.employeeId,
+        source_message_id: userRow?.id ?? null,
+        kind: item.kind,
+        content: item.content,
+        confidence: 1,
+      })));
+    }
+    if (conversation.title === "محادثة جديدة") {
+      await supabase.from("conversations").update({ title: data.message.replace(/\s+/g, " ").slice(0, 55) }).eq("id", data.conversationId);
+    } else {
+      await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", data.conversationId);
+    }
 
     const longForm =
       /مقال|خطة\s*(سيو|محتوى|تسويق)|\d{3,4}\s*كلمة|صفحة هبوط|دليل شامل|حملة كاملة/.test(data.message) ||
@@ -185,6 +208,8 @@ export const askEmployee = createServerFn({ method: "POST" })
       askedBlock,
       toolsBlock,
       "## أسلوب المحادثة",
+      "فكّر داخلياً بالترتيب: افهم الهدف، تحقق من الأدلة، اختر الإجراء، ثم سلّم النتيجة. لا تعرض خطوات تفكيرك.",
+      "راجع الإجابة قبل تسليمها: الدقة، الاكتمال، ملاءمة السوق العربي، صدق ما تم تنفيذه، وخطوة تالية واحدة.",
       "أجب دائماً بالعربية. التحية والأسئلة القصيرة: رد قصير ودافئ بجملة أو اثنتين ثم اقتراح عملي واحد. طلبات العمل: مخرج كامل جاهز مباشرة.",
       "إن كان طلب المستخدم يحتاج صورة (تصميم، منشور بصري، صورة مقال، كرييتف) فاكتب وصفاً بصرياً إنجليزياً دقيقاً في الحقل image_prompt — وستُولَّد الصورة فعلياً وتُعرض للمستخدم؛ لا تكتفِ بوصفها في النص.",
       'أعد ردك بصيغة JSON فقط بالشكل: {"reply": "نص ردك للمستخدم بصيغة Markdown", "deliverable": {"title": "عنوان المخرج", "kind": "نوع المخرج", "channel": "المنصة", "body": "نص المخرج الجاهز", "scheduled": "متى يُنفّذ", "image_prompt": "English visual prompt or null"} , "needs_connection": {"provider": "معرّف المنصة مثل instagram أو wordpress أو search-console", "reason": "سبب من 8 كلمات مرتبط بهذه المهمة"} }',
@@ -311,6 +336,7 @@ export const askEmployee = createServerFn({ method: "POST" })
         employee_id: data.employeeId,
         role: "assistant",
         body: reply,
+        conversation_id: data.conversationId,
       })
       .select()
       .single();
@@ -352,6 +378,7 @@ const skillInput = z.object({
   employeeId: z.string().min(1),
   skillId: z.string().min(1),
   values: z.record(z.string(), z.string()),
+  conversationId: z.string().uuid(),
 });
 
 /** تشغيل قدرة محددة: يخرج مخرجاً جاهزاً ويحفظه كمهمة بانتظار الاعتماد. */
@@ -364,6 +391,7 @@ export const runSkill = createServerFn({ method: "POST" })
       employeeId: data.employeeId,
       skillId: data.skillId,
       values: data.values,
+      conversationId: data.conversationId,
     });
     return { output: run.output, messageId: run.messageId, taskId: run.taskId };
   });

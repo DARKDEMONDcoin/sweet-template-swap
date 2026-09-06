@@ -342,6 +342,7 @@ export async function executeSkill(
     employeeId: string;
     skillId: string;
     values: Record<string, string>;
+    conversationId?: string;
     /** يُضاف إلى عنوان المهمة للتمييز بين التشغيل اليدوي والمجدول. */
     origin?: string;
   },
@@ -509,6 +510,7 @@ export async function executeSkill(
     employee_id: params.employeeId,
     role: "user",
     body: `▸ ${skill.title}${params.origin ? ` (${params.origin})` : ""}${requestSummary ? `\n${requestSummary}` : ""}`,
+    conversation_id: params.conversationId ?? null,
   });
 
   const long = LONG_SKILLS.has(skill.id);
@@ -600,6 +602,7 @@ export async function executeSkill(
       employee_id: params.employeeId,
       role: "assistant",
       body: output,
+      conversation_id: params.conversationId ?? null,
     })
     .select("id")
     .single();
