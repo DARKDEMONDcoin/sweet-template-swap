@@ -138,6 +138,86 @@ export type Database = {
           },
         ]
       }
+      brand_memories: {
+        Row: {
+          confidence: number
+          content: string
+          conversation_id: string | null
+          created_at: string
+          employee_id: string | null
+          id: string
+          kind: string
+          last_used_at: string | null
+          source_message_id: string | null
+          superseded_by: string | null
+          updated_at: string
+          valid_from: string
+          valid_until: string | null
+          workspace_id: string
+        }
+        Insert: {
+          confidence?: number
+          content: string
+          conversation_id?: string | null
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          kind?: string
+          last_used_at?: string | null
+          source_message_id?: string | null
+          superseded_by?: string | null
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string | null
+          workspace_id: string
+        }
+        Update: {
+          confidence?: number
+          content?: string
+          conversation_id?: string | null
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          kind?: string
+          last_used_at?: string | null
+          source_message_id?: string | null
+          superseded_by?: string | null
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_memories_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_memories_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_memories_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "brand_memories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_memories_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       briefings: {
         Row: {
           content: Json
@@ -166,6 +246,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "briefings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          title?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -249,6 +364,7 @@ export type Database = {
       messages: {
         Row: {
           body: string
+          conversation_id: string | null
           created_at: string
           employee_id: string
           id: string
@@ -257,6 +373,7 @@ export type Database = {
         }
         Insert: {
           body: string
+          conversation_id?: string | null
           created_at?: string
           employee_id: string
           id?: string
@@ -265,6 +382,7 @@ export type Database = {
         }
         Update: {
           body?: string
+          conversation_id?: string | null
           created_at?: string
           employee_id?: string
           id?: string
@@ -272,6 +390,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_workspace_id_fkey"
             columns: ["workspace_id"]
