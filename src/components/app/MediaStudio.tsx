@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ImagePlus, Loader2, Link2, X, Wand2, Check } from "lucide-react";
+import { ImagePlus, Loader2, Link2, X, Wand2, Check, Globe, RefreshCw } from "lucide-react";
 
 import { generateMedia } from "@/lib/media.functions";
+import { listSiteAssets, syncSiteAssets, type StoredAsset } from "@/lib/brand-assets.functions";
 import { cn } from "@/lib/utils";
 
 export type Attachment = { url: string; type: "image" | "video"; alt?: string };
@@ -76,6 +77,27 @@ export function MediaStudio({
     },
     onError: (e: unknown) => setError(e instanceof Error ? e.message : "تعذّر توليد الصور"),
   });
+
+  // صور موقع المستخدم الحقيقية — يختار منها مباشرة بدل الصور المولّدة.
+  const listAssets = useServerFn(listSiteAssets);
+  const syncAssets = useServerFn(syncSiteAssets);
+  const assetsQuery = useQuery({
+    queryKey: ["site-assets", workspaceId],
+    enabled: Boolean(workspaceId) && open,
+    queryFn: () => listAssets({ data: { workspaceId: workspaceId!, limit: 12 } }),
+  });
+  const siteAssets: StoredAsset[] = assetsQuery.data?.assets ?? [];
+  const sync = useMutation({
+    mutationFn: () => syncAssets({ data: { workspaceId: workspaceId! } }),
+    onSuccess: (res) => {
+      void assetsQuery.refetch();
+      if (!res?.ok) setError("أضف رابط موقعك في الإعدادات أولاً حتى نسحب صوره.");
+      else if (!res.count) setError("لم نجد صوراً مناسبة في موقعك.");
+      else setError(null);
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "تعذّر سحب صور الموقع"),
+  });
+
 
   const attach = (url: string, type: "image" | "video") => {
     if (attachments.some((a) => a.url === url) || attachments.length >= 8) return;
