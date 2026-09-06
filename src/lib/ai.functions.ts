@@ -133,7 +133,23 @@ const input = z.object({
   employeeId: z.string().min(1),
   message: z.string().min(1).max(4000),
   conversationId: z.string().uuid(),
+  /** وسائط أرفقها المستخدم (صور/فيديو) — تُحفظ داخل رسالته وتُعرض في المحادثة. */
+  attachments: z
+    .array(
+      z.object({
+        url: z.string().url().max(2000),
+        type: z.enum(["image", "video"]).default("image"),
+        alt: z.string().max(160).optional(),
+      }),
+    )
+    .max(8)
+    .optional(),
+  /** تحكّم المستخدم في الصورة التلقائية: تلقائي · إيقاف · وصف يكتبه بنفسه. */
+  imageMode: z.enum(["auto", "off", "manual"]).optional(),
+  imagePrompt: z.string().max(900).optional(),
+  imageAspect: z.enum(["square", "portrait", "landscape", "story"]).optional(),
 });
+
 
 /** الموظفون الذين تُولَّد لهم صورة فعلية عند وجود وصف بصري في الرد. */
 const VISUAL_EMPLOYEES = new Set(["dana", "sonny", "nour"]);
