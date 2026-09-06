@@ -420,19 +420,56 @@ export const askEmployee = createServerFn({ method: "POST" })
       .join(" ");
     const userTurn = mediaNote ? `${data.message}\n\n${mediaNote}` : data.message;
 
-    let raw = await freeChat(
-      apiKey,
-      [
-        { role: "system", content: system },
-        ...priorMessages,
-        { role: "user", content: userTurn },
-      ],
+    // خطة ضخمة (عدة أيام × عدة منصات): تُولَّد على دفعات — نداء واحد ضخم يتجاوز مهلة المزوّد.
+    let campaign: { reply: string; deliverables: Record<string, unknown>[] } | null = null;
+    if (askedTargets.length >= 2) {
+      try {
+        const { isCampaignRequest, generateCampaign } = await import("./campaign-plan.server");
+        if (isCampaignRequest(data.message, askedTargets)) {
+          campaign = await generateCampaign(apiKey, system, data.message, askedTargets);
+        }
+      } catch (error) {
+        console.warn("[campaign] failed:", error instanceof Error ? error.message : error);
+      }
+    }
 
-      // طلبات المقالات/الخطط الكاملة تحتاج مخرجاً طويلاً ومهلة أطول — مع سقف زمني إجمالي حتى لا يعلّق الشات.
-      longForm
-        ? { json: true, timeoutMs: 75_000, maxTokens: 6000, budgetMs: 130_000 }
-        : { json: true, timeoutMs: 40_000, maxTokens: 1800, budgetMs: 100_000 },
-    );
+    // مقال طويل: يُكتب على مراحل — نص المقال داخل JSON واحد يُقتطع فيضيع المقال كله.
+    if (!campaign && longForm) {
+      try {
+        const { isLongArticleRequest, generateLongArticle } = await import("./longform.server");
+        if (isLongArticleRequest(data.message)) {
+          const article = await generateLongArticle(apiKey, system, data.message);
+          if (article) {
+            campaign = {
+              reply: `جهّزت لك المقال كاملاً: **${article.title}** — نصه الكامل بالأسفل، ومعه الميتا والأسئلة الشائعة وسكيما FAQ جاهزة.`,
+              deliverables: [
+                { title: article.title, kind: "مقال", channel: "wordpress", body: article.body },
+              ],
+            };
+          }
+        }
+      } catch (error) {
+        console.warn("[longform] failed:", error instanceof Error ? error.message : error);
+      }
+    }
+
+    let raw = campaign
+
+      ? JSON.stringify({ reply: campaign.reply, deliverables: campaign.deliverables })
+      : await freeChat(
+          apiKey,
+          [
+            { role: "system", content: system },
+            ...priorMessages,
+            { role: "user", content: userTurn },
+          ],
+
+          // طلبات المقالات/الخطط الكاملة تحتاج مخرجاً طويلاً ومهلة أطول — مع سقف زمني إجمالي حتى لا يعلّق الشات.
+          longForm
+            ? { json: true, timeoutMs: 75_000, maxTokens: 6000, budgetMs: 130_000 }
+            : { json: true, timeoutMs: 40_000, maxTokens: 1800, budgetMs: 100_000 },
+        );
+
 
     let reply = raw;
     let deliverables: Deliverable[] = [];
