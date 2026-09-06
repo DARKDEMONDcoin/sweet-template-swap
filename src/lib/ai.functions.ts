@@ -611,6 +611,68 @@ export const askEmployee = createServerFn({ method: "POST" })
         : `${reply.trim()}\n\n📋 جهّزت **${deliverables.length} مخرجات** جاهزة، كل واحد بنصه الكامل — راجعها واعتمدها من [المخرجات والمهام](/app/tasks).`;
     }
 
+    // صور من موقع المستخدم نفسه: نقترح الأنسب لطلبه ليستخدمها بدل صورة مولّدة.
+    let siteSuggestions: { url: string; alt: string; pageUrl: string }[] = [];
+    try {
+      const { data: stored } = await supabase
+        .from("site_assets")
+        .select("url, alt, page_url, weight")
+        .eq("workspace_id", data.workspaceId)
+        .order("weight", { ascending: false })
+        .limit(120);
+
+      let pool = (stored ?? []).map((a) => ({
+        url: a.url,
+        alt: a.alt ?? "",
+        pageUrl: a.page_url ?? "",
+        weight: a.weight ?? 0,
+      }));
+
+      // أول مرة: نلتقط صور الموقع الآن ثم نحفظها للمرات القادمة.
+      if (!pool.length && workspace?.website) {
+        const { harvestSiteImages } = await import("./brand-assets.server");
+        const found = await harvestSiteImages(workspace.website, 4);
+        if (found.length) {
+          await supabase.from("site_assets").upsert(
+            found.map((a) => ({
+              workspace_id: data.workspaceId,
+              url: a.url,
+              page_url: a.pageUrl,
+              alt: a.alt || null,
+              weight: a.weight,
+              source: "website",
+              kind: "image",
+            })),
+            { onConflict: "workspace_id,url" },
+          );
+          pool = found.map((a) => ({ url: a.url, alt: a.alt, pageUrl: a.pageUrl, weight: a.weight }));
+        }
+      }
+
+      if (pool.length) {
+        const { rankAssets } = await import("./brand-assets.server");
+        const query = `${data.message}\n${deliverables.map((d) => `${d.title ?? ""} ${d.body ?? ""}`).join("\n")}`;
+        siteSuggestions = rankAssets(query, pool, 3).map((a) => ({
+          url: a.url,
+          alt: a.alt,
+          pageUrl: a.pageUrl,
+        }));
+      }
+    } catch (e) {
+      console.error("[site-assets] suggestion failed:", e);
+    }
+
+    if (siteSuggestions.length) {
+      const gallery = siteSuggestions
+        .map((s, i) => {
+          const label = s.alt?.trim() || `صورة من موقعك ${i + 1}`;
+          const page = s.pageUrl ? ` — [مصدرها](${s.pageUrl})` : "";
+          return `![${label}](${s.url})\n*${label}*${page}`;
+        })
+        .join("\n\n");
+      reply = `${reply.trim()}\n\n### 📸 صور من موقعك تصلح لهذا المحتوى\n\n${gallery}\n\nاختر أي صورة منها بدل الصورة المولّدة — كلها صور حقيقية من موقعك.`;
+    }
+
 
     const { data: assistantRow, error: assistantError } = await supabase
       .from("messages")
@@ -627,8 +689,12 @@ export const askEmployee = createServerFn({ method: "POST" })
 
     let createdTaskId: string | null = null;
     for (const deliverable of deliverables) {
-      // صورة المخرج: المولّدة، وإلا أول صورة أرفقها المستخدم بنفسه.
-      const mediaUrl = imageUrl ?? attachments.find((a) => a.type === "image")?.url ?? null;
+      // صورة المخرج: المولّدة، وإلا صورة أرفقها المستخدم، وإلا صورة حقيقية من موقعه.
+      const mediaUrl =
+        imageUrl ??
+        attachments.find((a) => a.type === "image")?.url ??
+        siteSuggestions[0]?.url ??
+        null;
       const output = mediaUrl
         ? `![${deliverable.title}](${mediaUrl})\n\n${deliverable.body!}`
         : deliverable.body!;
@@ -657,7 +723,14 @@ export const askEmployee = createServerFn({ method: "POST" })
       createdTaskId = createdTaskId ?? task?.id ?? null;
     }
 
-    return { reply, messageId: assistantRow.id, createdTaskId, needsConnection, imageUrl };
+    return {
+      reply,
+      messageId: assistantRow.id,
+      createdTaskId,
+      needsConnection,
+      imageUrl,
+      siteSuggestions,
+    };
   });
 
 const skillInput = z.object({
