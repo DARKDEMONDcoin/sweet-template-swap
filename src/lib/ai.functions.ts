@@ -723,7 +723,14 @@ export const askEmployee = createServerFn({ method: "POST" })
       createdTaskId = createdTaskId ?? task?.id ?? null;
     }
 
-    return { reply, messageId: assistantRow.id, createdTaskId, needsConnection, imageUrl };
+    return {
+      reply,
+      messageId: assistantRow.id,
+      createdTaskId,
+      needsConnection,
+      imageUrl,
+      siteSuggestions,
+    };
   });
 
 const skillInput = z.object({
