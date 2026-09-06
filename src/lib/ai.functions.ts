@@ -406,13 +406,28 @@ export const askEmployee = createServerFn({ method: "POST" })
       .reverse()
       .map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.body }));
 
+    // نُعلم الموظف بوسائط المستخدم وبقراره حول الصورة حتى يبني عليها بدل تجاهلها.
+    const mediaNote = [
+      attachments.length
+        ? `(المستخدم أرفق ${attachments.filter((a) => a.type === "image").length} صورة و${attachments.filter((a) => a.type === "video").length} فيديو مع الطلب — اعتمدها كوسائط المنشور ولا تطلب غيرها.)`
+        : "",
+      data.imageMode === "off" ? "(المستخدم أوقف توليد الصور — لا تكتب image_prompt.)" : "",
+      data.imageMode === "manual" && data.imagePrompt
+        ? `(المستخدم كتب وصف الصورة بنفسه: ${data.imagePrompt.slice(0, 300)} — لا تغيّره.)`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const userTurn = mediaNote ? `${data.message}\n\n${mediaNote}` : data.message;
+
     let raw = await freeChat(
       apiKey,
       [
         { role: "system", content: system },
         ...priorMessages,
-        { role: "user", content: data.message },
+        { role: "user", content: userTurn },
       ],
+
       // طلبات المقالات/الخطط الكاملة تحتاج مخرجاً طويلاً ومهلة أطول — مع سقف زمني إجمالي حتى لا يعلّق الشات.
       longForm
         ? { json: true, timeoutMs: 75_000, maxTokens: 6000, budgetMs: 130_000 }
