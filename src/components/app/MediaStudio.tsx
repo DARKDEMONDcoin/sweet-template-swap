@@ -272,6 +272,61 @@ export function MediaStudio({
             </div>
           ) : null}
 
+          <div className="rounded-xl border border-border bg-background/60 p-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Globe className="size-4 text-muted-foreground" />
+              <span className="text-[0.7rem] font-bold">صور من موقعك</span>
+              <button
+                type="button"
+                disabled={!workspaceId || sync.isPending}
+                onClick={() => {
+                  setError(null);
+                  sync.mutate();
+                }}
+                className="ms-auto inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[0.68rem] font-bold transition-colors hover:bg-secondary disabled:opacity-40"
+              >
+                {sync.isPending ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+                {siteAssets.length ? "تحديث" : "اسحب صور موقعي"}
+              </button>
+            </div>
+            {siteAssets.length ? (
+              <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                {siteAssets.map((a) => {
+                  const added = attachments.some((x) => x.url === a.url);
+                  return (
+                    <button
+                      key={a.url}
+                      type="button"
+                      title={a.alt ?? "صورة من موقعك"}
+                      onClick={() => attach(a.url, "image")}
+                      className={cn(
+                        "group relative overflow-hidden rounded-lg border transition-all",
+                        added ? "border-jade" : "border-border hover:-translate-y-0.5",
+                      )}
+                    >
+                      <img
+                        src={a.url}
+                        alt={a.alt ?? "صورة من موقعك"}
+                        className="aspect-square w-full object-cover"
+                        loading="lazy"
+                      />
+                      {added ? (
+                        <span className="absolute inset-x-0 bottom-0 bg-foreground/80 py-0.5 text-[0.6rem] font-bold text-background">
+                          ✓
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-1.5 text-[0.68rem] text-muted-foreground">
+                نجلب صور منتجاتك ومقالاتك من موقعك لتستخدمها مباشرة في المنشورات.
+              </p>
+            )}
+          </div>
+
+
           <div className="flex items-center gap-2">
             <Link2 className="size-4 shrink-0 text-muted-foreground" />
             <input
