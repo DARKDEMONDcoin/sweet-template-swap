@@ -64,6 +64,36 @@ function cosine(a: Map<string, number>, b: Map<string, number>, idf: Map<string,
 
 export type MemoryItem = { title: string; body?: string | null; kind?: string | null };
 
+export type DurableMemory = { content: string; kind?: string | null };
+
+/** يحول الذكريات الذرية إلى نفس شكل ذاكرة العلامة كي تشارك محرك الترتيب. */
+export function durableMemoryItems(items: DurableMemory[]): MemoryItem[] {
+  return items.map((item) => ({ title: item.content, kind: item.kind ?? "fact" }));
+}
+
+/** استخراج محافظ للحقائق التي صرّح المستخدم بأنها دائمة؛ لا يخمّن حقائق من الطلبات العادية. */
+export function extractExplicitMemories(text: string): { kind: string; content: string }[] {
+  const lines = text.split(/[\n.!؟]+/).map((line) => line.trim()).filter(Boolean);
+  const rules: Array<[RegExp, string]> = [
+    [/^(?:تذكر|افتكر|احفظ|خلي بالك)(?:\s+(?:أن|ان))?\s*[:：-]?\s*(.+)$/i, "fact"],
+    [/^(?:نفضل|أفضل|افضل|أحب|احب)\s+(.+)$/i, "preference"],
+    [/^(?:ممنوع|لا تستخدم|لا تكتب)\s+(.+)$/i, "rule"],
+    [/^(?:تصحيح|الصحيح هو)\s*[:：-]?\s*(.+)$/i, "correction"],
+    [/^(?:قررنا|القرار هو)\s*[:：-]?\s*(.+)$/i, "decision"],
+  ];
+  const found: { kind: string; content: string }[] = [];
+  for (const line of lines) {
+    for (const [pattern, kind] of rules) {
+      const match = line.match(pattern);
+      if (match?.[1] && match[1].trim().length >= 4) {
+        found.push({ kind, content: match[1].trim().slice(0, 500) });
+        break;
+      }
+    }
+  }
+  return found.slice(0, 4);
+}
+
 export type RankedMemory = MemoryItem & { score: number };
 
 /**

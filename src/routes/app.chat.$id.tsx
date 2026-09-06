@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Send, Settings2, Loader2, Check, Copy, Sparkles, ArrowUpLeft, Link2, Fingerprint, Share2, RefreshCw, Download, PenLine } from "lucide-react";
+import { Send, Settings2, Loader2, Check, Copy, Sparkles, ArrowUpLeft, Link2, Fingerprint, Share2, RefreshCw, Download, PenLine, Plus, Trash2 } from "lucide-react";
 
 import { AppShell } from "@/components/app/AppShell";
 import { AppIcon, appLabel } from "@/components/site/AppIcon";
 import { getMember } from "@/data/team";
 import { integrationStatusLabel } from "@/data/app";
-import { useBrainItems, useIntegrations, useMessages, useWorkspace } from "@/lib/data";
+import { useBrainItems, useConversations, useCreateConversation, useDeleteConversation, useIntegrations, useMessages, useRenameConversation, useWorkspace } from "@/lib/data";
 import { askEmployee, runSkill } from "@/lib/ai.functions";
 import { SkillPalette } from "@/components/app/SkillPalette";
 import { Thinking } from "@/components/app/Thinking";
@@ -238,7 +238,12 @@ function ChatPage() {
   const member = getMember(id)!;
   const qc = useQueryClient();
   const { data: workspace } = useWorkspace();
-  const { data: messages } = useMessages(workspace?.id, id);
+  const { data: conversations } = useConversations(workspace?.id, id);
+  const [conversationId, setConversationId] = useState<string | undefined>();
+  const createConversation = useCreateConversation(workspace?.id, id);
+  const renameConversation = useRenameConversation(workspace?.id, id);
+  const deleteConversation = useDeleteConversation(workspace?.id, id);
+  const { data: messages } = useMessages(workspace?.id, id, conversationId);
   const { data: integrations } = useIntegrations(workspace?.id);
   const { data: brainItems } = useBrainItems(workspace?.id);
   const hasVoiceGuide = (brainItems ?? []).some((b) => b.title === "دليل صوت العلامة");
@@ -253,6 +258,18 @@ function ChatPage() {
   const [needsConnection, setNeedsConnection] = useState<{ provider: string; reason: string } | null>(null);
 
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!conversationId && conversations?.[0]) setConversationId(conversations[0].id);
+    if (conversationId && conversations && !conversations.some((c) => c.id === conversationId)) {
+      setConversationId(conversations[0]?.id);
+    }
+  }, [conversationId, conversations]);
+
+  useEffect(() => {
+    if (!workspace || conversations === undefined || conversations.length > 0 || createConversation.isPending) return;
+    createConversation.mutate(undefined, { onSuccess: (row) => setConversationId(row.id) });
+  }, [workspace, conversations, createConversation]);
 
   const [showSettings, setShowSettings] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -271,14 +288,15 @@ function ChatPage() {
 
   const send = useMutation({
     mutationFn: (message: string) =>
-      ask({ data: { workspaceId: workspace!.id, employeeId: id, message } }),
+      ask({ data: { workspaceId: workspace!.id, employeeId: id, conversationId: conversationId!, message } }),
     onSuccess: async (res) => {
-      await qc.invalidateQueries({ queryKey: ["messages", workspace?.id, id] });
+      await qc.invalidateQueries({ queryKey: ["messages", workspace?.id, id, conversationId] });
       setPending(null);
       setPendingText(null);
       setSavedTask(Boolean(res?.createdTaskId));
       setNeedsConnection(res?.needsConnection ?? null);
       void qc.invalidateQueries({ queryKey: ["messages-last", workspace?.id] });
+      void qc.invalidateQueries({ queryKey: ["conversations", workspace?.id, id] });
       void qc.invalidateQueries({ queryKey: ["tasks", workspace?.id] });
     },
     onError: (e: unknown, message) => {
@@ -296,11 +314,12 @@ function ChatPage() {
           employeeId: id,
           skillId: p.skill.id,
           values: p.values,
+          conversationId: conversationId!,
         },
       }),
     onSuccess: (res) => {
       setSavedTask(Boolean(res?.taskId));
-      void qc.invalidateQueries({ queryKey: ["messages", workspace?.id, id] });
+      void qc.invalidateQueries({ queryKey: ["messages", workspace?.id, id, conversationId] });
       void qc.invalidateQueries({ queryKey: ["messages-last", workspace?.id] });
       void qc.invalidateQueries({ queryKey: ["tasks", workspace?.id] });
     },
@@ -327,7 +346,7 @@ function ChatPage() {
 
   const submit = (text: string) => {
     const body = text.trim();
-    if (!body || !workspace || busy) return;
+    if (!body || !workspace || !conversationId || busy) return;
     setError(null);
     setSavedTask(false);
 
@@ -633,6 +652,56 @@ function ChatPage() {
             showSettings ? "block" : "hidden lg:block",
           )}
         >
+          <div className="mb-6 border-b border-border pb-5">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-display font-black">المحادثات</h2>
+              <button
+                type="button"
+                aria-label="محادثة جديدة"
+                title="محادثة جديدة"
+                disabled={!workspace || createConversation.isPending}
+                onClick={() => createConversation.mutate(undefined, { onSuccess: (row) => setConversationId(row.id) })}
+                className="grid size-9 place-items-center rounded-xl border border-border transition-colors hover:bg-secondary disabled:opacity-50"
+              >
+                {createConversation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+              </button>
+            </div>
+            <div className="mt-3 max-h-56 space-y-1 overflow-y-auto">
+              {(conversations ?? []).map((conversation) => (
+                <div
+                  key={conversation.id}
+                  className={cn(
+                    "group flex items-center gap-1 rounded-xl border px-2 py-1.5",
+                    conversation.id === conversationId ? "border-primary/40 bg-primary/10" : "border-transparent hover:bg-secondary/70",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setConversationId(conversation.id)}
+                    onDoubleClick={() => {
+                      const title = window.prompt("اسم المحادثة", conversation.title)?.trim();
+                      if (title) renameConversation.mutate({ id: conversation.id, title });
+                    }}
+                    className="min-w-0 flex-1 truncate px-2 py-1 text-start text-sm font-semibold"
+                    title="انقر مرتين لإعادة التسمية"
+                  >
+                    {conversation.title}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="حذف المحادثة"
+                    title="حذف المحادثة"
+                    onClick={() => {
+                      if (window.confirm("حذف هذه المحادثة ورسائلها؟")) deleteConversation.mutate(conversation.id);
+                    }}
+                    className="grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground opacity-0 transition-opacity hover:bg-coral/10 hover:text-coral group-hover:opacity-100 focus:opacity-100"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
           <h2 className="font-display font-black">حسابات {member.name}</h2>
           <p className="mt-1 text-sm text-muted-foreground">حساب واحد لكل منصة داخل مساحة العمل.</p>
           <ul className="mt-4 space-y-2">

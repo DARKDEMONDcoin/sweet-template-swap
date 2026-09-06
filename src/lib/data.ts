@@ -9,6 +9,7 @@ export type Integration = Tables<"integrations">;
 export type BrainItem = Tables<"brain_items">;
 export type Task = Tables<"tasks">;
 export type Message = Tables<"messages">;
+export type Conversation = Tables<"conversations">;
 
 export type TaskStep = { label: string; state: "done" | "active" | "todo" | "blocked" };
 
@@ -97,10 +98,65 @@ export function useTasks(workspaceId?: string) {
   });
 }
 
-export function useMessages(workspaceId: string | undefined, employeeId: string) {
+export function useConversations(workspaceId: string | undefined, employeeId: string) {
   return useQuery({
-    queryKey: ["messages", workspaceId, employeeId],
+    queryKey: ["conversations", workspaceId, employeeId],
     enabled: !!workspaceId,
+    queryFn: () =>
+      must<Conversation[]>(
+        supabase
+          .from("conversations")
+          .select("*")
+          .eq("workspace_id", workspaceId!)
+          .eq("employee_id", employeeId)
+          .order("updated_at", { ascending: false }),
+      ),
+  });
+}
+
+export function useCreateConversation(workspaceId: string | undefined, employeeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const row = await must<Conversation>(
+        supabase
+          .from("conversations")
+          .insert({ workspace_id: workspaceId!, employee_id: employeeId })
+          .select()
+          .single(),
+      );
+      return row;
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["conversations", workspaceId, employeeId] }),
+  });
+}
+
+export function useRenameConversation(workspaceId: string | undefined, employeeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, title }: { id: string; title: string }) => {
+      const { error } = await supabase.from("conversations").update({ title: title.slice(0, 80) }).eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["conversations", workspaceId, employeeId] }),
+  });
+}
+
+export function useDeleteConversation(workspaceId: string | undefined, employeeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("conversations").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["conversations", workspaceId, employeeId] }),
+  });
+}
+
+export function useMessages(workspaceId: string | undefined, employeeId: string, conversationId?: string) {
+  return useQuery({
+    queryKey: ["messages", workspaceId, employeeId, conversationId],
+    enabled: !!workspaceId && !!conversationId,
     queryFn: () =>
       must<Message[]>(
         supabase
@@ -108,6 +164,7 @@ export function useMessages(workspaceId: string | undefined, employeeId: string)
           .select("*")
           .eq("workspace_id", workspaceId!)
           .eq("employee_id", employeeId)
+          .eq("conversation_id", conversationId!)
           .order("created_at", { ascending: true }),
       ),
   });
