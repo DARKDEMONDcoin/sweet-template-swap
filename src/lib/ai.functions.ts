@@ -9,6 +9,7 @@ import {
   evidenceRules,
   executeSkill,
   personas,
+  qualityCriteria,
   researchFor,
 } from "@/lib/nour-run.server";
 import { employeeDirectory, sharedSystemBlocks, type EmployeeId } from "@/lib/team-knowledge";
@@ -194,6 +195,9 @@ export const askEmployee = createServerFn({ method: "POST" })
         ? `كلمات ممنوعة تماماً: ${workspace.banned_words.join("، ")}.`
         : "",
       craft[data.employeeId] ? `## معايير حِرفتك\n${craft[data.employeeId]}` : "",
+      qualityCriteria[data.employeeId]?.length
+        ? `## معايير قبول الرد\n${(qualityCriteria[data.employeeId] ?? []).map((criterion, index) => `${index + 1}) ${criterion}`).join("\n")}`
+        : "",
       ...sharedSystemBlocks({
         employeeId: data.employeeId,
         connected,
@@ -224,7 +228,7 @@ export const askEmployee = createServerFn({ method: "POST" })
       .reverse()
       .map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.body }));
 
-    const raw = await freeChat(
+    let raw = await freeChat(
       apiKey,
       [
         { role: "system", content: system },
@@ -240,6 +244,23 @@ export const askEmployee = createServerFn({ method: "POST" })
     let reply = raw;
     let deliverables: Deliverable[] = [];
     let needsConnection: NeedsConnection = null;
+
+    // محاولة إصلاح واحدة فقط للمخرجات الطويلة التي لم تُرجع JSON صالحاً أو مخرجاً كاملاً.
+    if (longForm && (!raw.trim().startsWith("{") || !/"reply"\s*:/.test(raw))) {
+      try {
+        raw = await freeChat(apiKey, [
+          { role: "system", content: system },
+          { role: "user", content: data.message },
+          { role: "assistant", content: raw },
+          {
+            role: "user",
+            content: "راجع المسودة مرة واحدة وفق معايير القبول، وأصلح النقص أو القطع فقط. أعد JSON صالحاً كاملاً بنفس البنية المطلوبة دون شرح خارجي.",
+          },
+        ], { json: true, timeoutMs: 40_000, maxTokens: 6000, budgetMs: 55_000 });
+      } catch (error) {
+        console.warn("[chat] repair pass skipped:", error instanceof Error ? error.message : error);
+      }
+    }
 
     try {
       const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
