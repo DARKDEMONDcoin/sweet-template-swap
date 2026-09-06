@@ -689,8 +689,12 @@ export const askEmployee = createServerFn({ method: "POST" })
 
     let createdTaskId: string | null = null;
     for (const deliverable of deliverables) {
-      // صورة المخرج: المولّدة، وإلا أول صورة أرفقها المستخدم بنفسه.
-      const mediaUrl = imageUrl ?? attachments.find((a) => a.type === "image")?.url ?? null;
+      // صورة المخرج: المولّدة، وإلا صورة أرفقها المستخدم، وإلا صورة حقيقية من موقعه.
+      const mediaUrl =
+        imageUrl ??
+        attachments.find((a) => a.type === "image")?.url ??
+        siteSuggestions[0]?.url ??
+        null;
       const output = mediaUrl
         ? `![${deliverable.title}](${mediaUrl})\n\n${deliverable.body!}`
         : deliverable.body!;
