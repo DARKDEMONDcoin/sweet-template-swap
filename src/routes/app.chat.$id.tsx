@@ -568,7 +568,11 @@ function ChatPage() {
                           </Link>
                         )
                       ) : null}
-                      {!isUser && id === "sonny" && workspace && looksPostable(m.body) ? (
+                      {!isUser &&
+                      id === "sonny" &&
+                      workspace &&
+                      !m.body.includes("(/app/tasks)") &&
+                      looksPostable(m.body) ? (
                         <PublishPanel
                           workspaceId={workspace.id}
                           employeeId="sonny"
