@@ -522,10 +522,19 @@ export const askEmployee = createServerFn({ method: "POST" })
     }
 
     // الصور تُولَّد فعلياً — لا يبقى المستخدم مع «برومبت» مكتوب فقط.
+    // والمستخدم هو صاحب القرار: إيقاف · تلقائي · وصف يكتبه بنفسه (يُترجم حرفياً بلا إضافة).
     let imageUrl: string | null = null;
-    if (VISUAL_EMPLOYEES.has(data.employeeId)) {
+    const imageMode = data.imageMode ?? "auto";
+    const userImagePrompt = data.imagePrompt?.trim() ?? "";
+    const wantsImage =
+      imageMode === "manual"
+        ? userImagePrompt.length > 2
+        : imageMode !== "off" &&
+          VISUAL_EMPLOYEES.has(data.employeeId) &&
+          attachments.every((a) => a.type !== "image");
+    if (wantsImage) {
       try {
-        const { ownedHeroImage, extractImagePrompt, imageBrief } =
+        const { ownedHeroImage, extractImagePrompt, imageBrief, literalBrief, aspectSize } =
           await import("./image-gen.server");
         const fromField = deliverables
           .map((d) => d.image_prompt)
@@ -534,30 +543,37 @@ export const askEmployee = createServerFn({ method: "POST" })
           (fromField ? fromField.trim() : null) ??
           extractImagePrompt(`${reply}\n${deliverables.map((d) => d.body ?? "").join("\n")}`);
         const wantsVisual =
-          Boolean(draft) || deliverables.some((d) => d.body && d.body.length > 80);
+          imageMode === "manual" ||
+          Boolean(draft) ||
+          deliverables.some((d) => d.body && d.body.length > 80);
         if (wantsVisual) {
-          // «مخرج صور»: الوصف يُشتق من طلب المستخدم نفسه ومن المخرج، حتى تعكس الصورة الموضوع فعلاً.
-          const prompt = await imageBrief({
-            request: data.message,
-            title: deliverables[0]?.title ?? null,
-            body: deliverables[0]?.body ?? reply,
-            brand: {
-              name: workspace?.name,
-              industry: workspace?.industry,
-              country: workspace?.country ?? null,
-            },
-            draft,
-          });
+          // وصف المستخدم يُحترم حرفياً؛ وإلا يُشتق الوصف من طلبه ومن المخرج نفسه.
+          const prompt =
+            imageMode === "manual"
+              ? await literalBrief(userImagePrompt)
+              : await imageBrief({
+                  request: data.message,
+                  title: deliverables[0]?.title ?? null,
+                  body: deliverables[0]?.body ?? reply,
+                  brand: {
+                    name: workspace?.name,
+                    industry: workspace?.industry,
+                    country: workspace?.country ?? null,
+                  },
+                  draft,
+                });
           imageUrl = await ownedHeroImage(
             supabase as unknown as Parameters<typeof ownedHeroImage>[0],
             data.workspaceId,
             prompt,
+            aspectSize(data.imageAspect ?? "landscape"),
           );
         }
       } catch (error) {
         console.error("[chat] image generation failed:", error);
       }
     }
+
 
     reply = sanitizeActionClaims(reply, connected);
     const footers = toolBlocks.map((t) => t.footer).filter(Boolean);
