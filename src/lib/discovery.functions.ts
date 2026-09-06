@@ -173,7 +173,9 @@ export const discoverBrand = createServerFn({ method: "POST" })
 
     const competitors: DiscoveryCompetitor[] = rivals
       .filter((r): r is NonNullable<typeof r> => Boolean(r?.domain))
-      .map((r) => ({ domain: r.domain, contentCount: r.urlCount, topics: r.topics.slice(0, 6) }));
+      .map((r) => ({ domain: r.domain, contentCount: r.urlCount, topics: r.topics.slice(0, 6) }))
+      .filter((c) => c.contentCount > 0 || c.topics.length > 0);
+
 
     // الحضور على المنصات: روابط الموقع أولاً ثم بحث حيّ عن اسم العلامة.
     const foundMap = new Map<string, string>();
