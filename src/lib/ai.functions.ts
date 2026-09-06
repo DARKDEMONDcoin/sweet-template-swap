@@ -440,7 +440,8 @@ export const askEmployee = createServerFn({ method: "POST" })
       deliverables = items
         .flatMap((x) => [x.deliverable, ...(Array.isArray(x.deliverables) ? x.deliverables : [])])
         .filter((d): d is Deliverable => Boolean(d?.title && d.body))
-        .map((d) => (askedTargets[0] ? { ...d, channel: askedTargets[0] } : d));
+        // لا نفرض المنصة إلا على مخرج بلا منصة، حتى لا تُدمج خطة متعددة المنصات في منصة واحدة.
+        .map((d) => (d.channel ? d : askedTargets[0] ? { ...d, channel: askedTargets[0] } : d));
       // النموذج قد يعيد بنية خاصة به (خطة أسبوع، عدة منشورات) — نلتقط المخرجات منها بدل عرض JSON خام.
       if (!deliverables.length) deliverables = harvestDeliverables(parsed).slice(0, 14);
       const nc = items
