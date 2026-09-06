@@ -348,6 +348,13 @@ function ChatPage() {
 
   const [error, setError] = useState<string | null>(null);
 
+  // حرية الوسائط: مرفقات المستخدم + قراره في الصورة التلقائية + نسبة الأبعاد.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [imageMode, setImageMode] = useState<ImageMode>("auto");
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [aspect, setAspect] = useState<Aspect>("square");
+
+
   useEffect(() => {
     if (!conversationId && conversations?.[0]) setConversationId(conversations[0].id);
     if (conversationId && conversations && !conversations.some((c) => c.id === conversationId)) {
