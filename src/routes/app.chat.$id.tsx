@@ -205,25 +205,114 @@ function ChatMissing() {
   );
 }
 
+/** عناوين عربية لمفاتيح JSON عند عرض رد قديم بصيغة غير متوقعة. */
+const JSON_LABELS: Record<string, string> = {
+  day: "اليوم",
+  title: "العنوان",
+  content_pillar: "محور المحتوى",
+  channel: "المنصة",
+  body: "النص",
+  caption: "النص",
+  hashtags: "الهاشتاجات",
+  scheduled: "موعد النشر",
+  best_time: "أفضل وقت",
+  metrics_to_measure: "مؤشرات القياس",
+  call_to_action: "دعوة لاتخاذ إجراء",
+  instagram_post: "منشور إنستجرام",
+  x_post: "تغريدة إكس",
+  linkedin_post: "منشور لينكدإن",
+  facebook_post: "منشور فيسبوك",
+};
+const JSON_HIDDEN = new Set(["image_prompt", "needs_connection", "kind", "provider", "reason"]);
+
+/** يحوّل أي بنية JSON إلى نص عربي مقروء بدل عرض أقواس ومفاتيح. */
+function jsonToText(node: unknown, depth = 0): string {
+  if (node === null || node === undefined) return "";
+  if (typeof node === "string") return node.replace(/\\n/g, "\n").trim();
+  if (typeof node === "number" || typeof node === "boolean") return String(node);
+  if (Array.isArray(node))
+    return node
+      .map((v) => {
+        const r = jsonToText(v, depth + 1);
+        return r && typeof v !== "object" ? `- ${r}` : r;
+      })
+      .filter(Boolean)
+      .join(depth === 0 ? "\n\n---\n\n" : "\n");
+  if (typeof node === "object")
+    return Object.entries(node as Record<string, unknown>)
+      .filter(([k, v]) => !JSON_HIDDEN.has(k) && v !== null && v !== undefined && v !== "")
+      .map(([k, v]) => {
+        const r = jsonToText(v, depth + 1);
+        if (!r) return "";
+        const label = JSON_LABELS[k] ?? k.replace(/_/g, " ");
+        if (typeof v === "object") return `${"#".repeat(Math.min(depth + 2, 6))} ${label}\n\n${r}`;
+        return r.includes("\n") ? `**${label}:**\n\n${r}` : `**${label}:** ${r}`;
+      })
+      .filter(Boolean)
+      .join("\n\n");
+  return "";
+}
+
 /** بعض الردود القديمة محفوظة كنص JSON خام — نحوّلها لعرض مقروء. */
+/** يفصل بادئة JSON عن أي نص أُلحق بها (صورة، مصادر) في الردود القديمة. */
+function splitJsonPrefix(text: string): { parsed: unknown; rest: string } | null {
+  const open = text[0];
+  if (open !== "{" && open !== "[") return null;
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (esc) {
+      esc = false;
+      continue;
+    }
+    if (ch === "\\") {
+      esc = true;
+      continue;
+    }
+    if (ch === '"') inStr = !inStr;
+    if (inStr) continue;
+    if (ch === open) depth += 1;
+    else if (ch === close) {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return { parsed: JSON.parse(text.slice(0, i + 1)), rest: text.slice(i + 1).trim() };
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function prettyBody(body: string): string {
   const text = body.trim();
   if (!text.startsWith("{") && !text.startsWith("[")) return body;
   try {
-    const parsed: unknown = JSON.parse(text);
+    const split = splitJsonPrefix(text);
+    if (!split) throw new Error("not json");
+    const { parsed, rest } = split;
+    const tail = rest ? `\n\n${rest}` : "";
     const items = (Array.isArray(parsed) ? parsed : [parsed]) as Array<{
       reply?: string;
       deliverable?: { title?: string; body?: string } | null;
+      deliverables?: Array<{ title?: string; body?: string }> | null;
     }>;
     const parts = items.flatMap((item) => {
       if (!item || typeof item !== "object") return [];
       const chunk: string[] = [];
       if (typeof item.reply === "string" && item.reply.trim()) chunk.push(item.reply.trim());
-      const d = item.deliverable;
-      if (d?.body) chunk.push(`### ${d.title ?? "المخرج"}\n\n${d.body}`);
+      for (const d of [item.deliverable, ...(Array.isArray(item.deliverables) ? item.deliverables : [])])
+        if (d?.body) chunk.push(`### ${d.title ?? "المخرج"}\n\n${d.body}`);
       return chunk;
     });
-    return parts.length ? parts.join("\n\n") : body;
+    if (parts.length) return parts.join("\n\n") + tail;
+    const readable = jsonToText(parsed);
+    return readable.trim().length > 20 ? readable + tail : body;
   } catch {
     return body;
   }

@@ -25,6 +25,109 @@ type Deliverable = {
 
 type NeedsConnection = { provider: string; reason: string } | null;
 
+/** ترجمة مفاتيح JSON الشائعة إلى عناوين عربية عند عرض مخرج غير مطابق للبنية. */
+const KEY_LABELS: Record<string, string> = {
+  day: "اليوم",
+  date: "التاريخ",
+  title: "العنوان",
+  content_pillar: "محور المحتوى",
+  pillar: "المحور",
+  channel: "المنصة",
+  platform: "المنصة",
+  body: "النص",
+  caption: "النص",
+  text: "النص",
+  hashtags: "الهاشتاجات",
+  scheduled: "موعد النشر",
+  best_time: "أفضل وقت",
+  time: "الوقت",
+  metrics_to_measure: "مؤشرات القياس",
+  metrics: "المؤشرات",
+  kpis: "المؤشرات",
+  call_to_action: "دعوة لاتخاذ إجراء",
+  cta: "دعوة لاتخاذ إجراء",
+  instagram_post: "منشور إنستجرام",
+  x_post: "تغريدة إكس",
+  linkedin_post: "منشور لينكدإن",
+  facebook_post: "منشور فيسبوك",
+  notes: "ملاحظات",
+  summary: "ملخص",
+};
+
+/** مفاتيح تقنية لا تُعرض للمستخدم داخل النص. */
+const HIDDEN_KEYS = new Set(["image_prompt", "needs_connection", "kind", "provider", "reason"]);
+
+const labelFor = (key: string) => KEY_LABELS[key] ?? key.replace(/_/g, " ");
+
+/** يحوّل أي بنية JSON غير متوقعة إلى Markdown عربي مقروء بدل عرض JSON خام. */
+function jsonToMarkdown(node: unknown, depth = 0): string {
+  if (node === null || node === undefined) return "";
+  if (typeof node === "string") return node.replace(/\\n/g, "\n").trim();
+  if (typeof node === "number" || typeof node === "boolean") return String(node);
+  if (Array.isArray(node)) {
+    return node
+      .map((item) => {
+        const rendered = jsonToMarkdown(item, depth + 1);
+        if (!rendered) return "";
+        return typeof item === "object" && item !== null ? rendered : `- ${rendered}`;
+      })
+      .filter(Boolean)
+      .join(depth === 0 ? "\n\n---\n\n" : "\n");
+  }
+  if (typeof node === "object") {
+    const entries = Object.entries(node as Record<string, unknown>).filter(
+      ([k, v]) => !HIDDEN_KEYS.has(k) && v !== null && v !== undefined && v !== "",
+    );
+    return entries
+      .map(([key, value]) => {
+        const rendered = jsonToMarkdown(value, depth + 1);
+        if (!rendered) return "";
+        const heading = "#".repeat(Math.min(depth + 2, 6));
+        if (typeof value === "object")
+          return `${heading} ${labelFor(key)}\n\n${rendered}`;
+        if (rendered.includes("\n")) return `**${labelFor(key)}:**\n\n${rendered}`;
+        return `**${labelFor(key)}:** ${rendered}`;
+      })
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  return "";
+}
+
+/** يلتقط المخرجات الجاهزة من أي بنية JSON متداخلة (خطة أسبوع، عدة منشورات…). */
+function harvestDeliverables(node: unknown, out: Deliverable[] = [], depth = 0): Deliverable[] {
+  if (out.length >= 24 || depth > 5 || !node || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const item of node) harvestDeliverables(item, out, depth + 1);
+    return out;
+  }
+  const obj = node as Record<string, unknown>;
+  const text = ["body", "caption", "text", "content", "post"]
+    .map((k) => obj[k])
+    .find((v): v is string => typeof v === "string" && v.trim().length > 30);
+  if (text) {
+    const extras = [obj["hashtags"], obj["call_to_action"], obj["cta"]]
+      .map((v) => (Array.isArray(v) ? v.join(" ") : typeof v === "string" ? v : ""))
+      .filter(Boolean)
+      .join("\n\n");
+    const str = (k: string) => (typeof obj[k] === "string" ? (obj[k] as string) : undefined);
+    const channel = str("channel") ?? str("platform");
+    const scheduled = str("scheduled") ?? str("best_time");
+    const imagePrompt = str("image_prompt");
+    out.push({
+      title: str("title") ?? str("day") ?? "مخرج جاهز",
+      body: extras ? `${text.replace(/\\n/g, "\n")}\n\n${extras}` : text.replace(/\\n/g, "\n"),
+      ...(channel ? { channel } : {}),
+      ...(scheduled ? { scheduled } : {}),
+      ...(imagePrompt ? { image_prompt: imagePrompt } : {}),
+    });
+  }
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === "object") harvestDeliverables(value, out, depth + 1);
+  }
+  return out;
+}
+
 const input = z.object({
   workspaceId: z.string().uuid(),
   employeeId: z.string().min(1),
@@ -262,6 +365,8 @@ export const askEmployee = createServerFn({ method: "POST" })
       "أجب دائماً بالعربية. التحية والأسئلة القصيرة: رد قصير ودافئ بجملة أو اثنتين ثم اقتراح عملي واحد. طلبات العمل: مخرج كامل جاهز مباشرة.",
       "إن كان طلب المستخدم يحتاج صورة (تصميم، منشور بصري، صورة مقال، كرييتف) فاكتب وصفاً بصرياً إنجليزياً دقيقاً في الحقل image_prompt — وستُولَّد الصورة فعلياً وتُعرض للمستخدم؛ لا تكتفِ بوصفها في النص.",
       'أعد ردك بصيغة JSON فقط بالشكل: {"reply": "نص ردك للمستخدم بصيغة Markdown", "deliverable": {"title": "عنوان المخرج", "kind": "نوع المخرج", "channel": "المنصة", "body": "نص المخرج الجاهز", "scheduled": "متى يُنفّذ", "image_prompt": "English visual prompt or null"} , "needs_connection": {"provider": "معرّف المنصة مثل instagram أو wordpress أو search-console", "reason": "سبب من 8 كلمات مرتبط بهذه المهمة"} }',
+      'ممنوع تماماً ابتكار بنية JSON أخرى. إن طلب المستخدم عدة مخرجات (خطة أسبوع، عدة منشورات، عدة منصات) فاستخدم مصفوفة "deliverables": [ {نفس حقول deliverable}, … ] بدل deliverable، واجعل "reply" ملخصاً بالعربية للخطة (المحاور، التوزيع، مؤشرات القياس) — ولا تضع JSON داخل reply أو داخل body إطلاقاً.',
+      'حقل body يجب أن يكون نص المنشور/المقال الجاهز للنشر كما يقرأه الجمهور فقط — بلا مفاتيح ولا أقواس ولا وصف الصورة. ووصف الصورة الإنجليزي يوضع في image_prompt وحده ولا يظهر للمستخدم.',
       'إن لم يطلب المستخدم مخرجاً جاهزاً للنشر أو الإرسال، اجعل "deliverable" القيمة null. واجعل "needs_connection" القيمة null إلا إذا كانت هذه المهمة تحديداً تحتاج حساباً غير مربوط لتنفيذها فعلياً (نشر/إرسال/قراءة بيانات حقيقية).',
       `المنصة الافتراضية لك هي ${persona.channel} ونوع مخرجك الشائع ${persona.kind}.`,
     ]
@@ -325,6 +430,7 @@ export const askEmployee = createServerFn({ method: "POST" })
         ): x is {
           reply?: string;
           deliverable?: Deliverable | null;
+          deliverables?: Deliverable[] | null;
           needs_connection?: NeedsConnection;
         } => Boolean(x) && typeof x === "object",
       );
@@ -332,9 +438,11 @@ export const askEmployee = createServerFn({ method: "POST" })
         .map((x) => (typeof x.reply === "string" ? x.reply.trim() : ""))
         .filter(Boolean);
       deliverables = items
-        .map((x) => x.deliverable)
+        .flatMap((x) => [x.deliverable, ...(Array.isArray(x.deliverables) ? x.deliverables : [])])
         .filter((d): d is Deliverable => Boolean(d?.title && d.body))
         .map((d) => (askedTargets[0] ? { ...d, channel: askedTargets[0] } : d));
+      // النموذج قد يعيد بنية خاصة به (خطة أسبوع، عدة منشورات) — نلتقط المخرجات منها بدل عرض JSON خام.
+      if (!deliverables.length) deliverables = harvestDeliverables(parsed).slice(0, 14);
       const nc = items
         .map((x) => x.needs_connection)
         .find((n) => n && typeof n === "object" && typeof n.provider === "string");
@@ -361,6 +469,10 @@ export const askEmployee = createServerFn({ method: "POST" })
         reply = replies.join("\n\n");
       } else if (deliverables.length) {
         reply = deliverables.map((d) => `### ${d.title}\n\n${d.body}`).join("\n\n---\n\n");
+      } else {
+        // بنية غير متوقعة تماماً: نعرضها كنص عربي مقروء بدل JSON خام.
+        const markdown = jsonToMarkdown(parsed);
+        if (markdown.trim().length > 20) reply = markdown;
       }
     } catch {
       deliverables = [];
