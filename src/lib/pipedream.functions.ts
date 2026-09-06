@@ -69,19 +69,26 @@ export const startPipedreamConnect = createServerFn({ method: "POST" })
     if (!config) throw missingConfigError();
 
     const origin = new URL(data.origin).origin;
-    const token = await createConnectToken(config, data.workspaceId, [origin]);
+    const successUri =
+      `${origin}/app/integrations?pd=connected&provider=${data.provider}` +
+      (data.returnTo && data.returnTo.startsWith("/")
+        ? `&back=${encodeURIComponent(data.returnTo)}`
+        : "");
+    const errorUri = `${origin}/app/integrations?pd=failed`;
+    // مسارات العودة تُضبط عند إنشاء التوكن (هذا ما يعتمده الوسيط رسمياً).
+    const token = await createConnectToken(config, data.workspaceId, [origin], {
+      success: successUri,
+      error: errorUri,
+    });
 
     const base =
       token.connect_link_url ??
       `https://pipedream.com/_static/connect.html?token=${encodeURIComponent(token.token)}`;
     const url = new URL(base);
     url.searchParams.set("app", app.slug);
-    url.searchParams.set(
-      "success_redirect_uri",
-      `${origin}/app/integrations?pd=connected&provider=${data.provider}` +
-        (data.returnTo && data.returnTo.startsWith("/") ? `&back=${encodeURIComponent(data.returnTo)}` : ""),
-    );
-    url.searchParams.set("error_redirect_uri", `${origin}/app/integrations?pd=failed`);
+    url.searchParams.set("connectLink", "true");
+    url.searchParams.set("success_redirect_uri", successUri);
+    url.searchParams.set("error_redirect_uri", errorUri);
 
     // ملف الصلاحيات المناسب للنشر (وإلا يفتح فيسبوك نافذة «قراءة فقط»).
     const required = PUBLISH_SCOPES[data.provider];

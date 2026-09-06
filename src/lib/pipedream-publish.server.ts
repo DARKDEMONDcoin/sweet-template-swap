@@ -129,14 +129,29 @@ export async function publishToPlatform(
     throw new Error(`النشر المباشر غير متاح بعد على ${params.provider}.`);
   }
 
-  const props: Record<string, unknown> = {
-    [app.accountProp]: { authProvisionId: account.account_id },
-    ...textProps(params.provider, params.text),
-  };
   if (params.videoUrl)
     throw new Error(
       `نشر الفيديو متاح حالياً على فيسبوك وإنستجرام فقط — على ${app.label} انشر نصاً أو صورة.`,
     );
+
+  // المسار المباشر (واجهة المنصة عبر وكيل الوسيط) أسرع وأدق من الإجراءات الجاهزة،
+  // ويعمل في بيئة الإنتاج دون قيود باقة الإجراءات.
+  const direct = await publishDirect(
+    config,
+    params.workspaceId,
+    account.account_id,
+    params.provider,
+    params.text,
+    params.imageUrl,
+  );
+  if (direct !== undefined) {
+    return { provider: params.provider, accountId: account.account_id, result: direct };
+  }
+
+  const props: Record<string, unknown> = {
+    [app.accountProp]: { authProvisionId: account.account_id },
+    ...textProps(params.provider, params.text),
+  };
   if (params.imageUrl) Object.assign(props, imageProps(params.provider, params.imageUrl));
 
   const result = await runAction(config, {
@@ -146,6 +161,81 @@ export async function publishToPlatform(
   });
 
   return { provider: params.provider, accountId: account.account_id, result };
+}
+
+/**
+ * نشر مباشر على واجهة المنصة نفسها عبر وكيل Pipedream (بلا توكنات لدينا).
+ * يعيد undefined إن لم يكن للمنصة مسار مباشر بعد.
+ */
+async function publishDirect(
+  config: PipedreamConfig,
+  workspaceId: string,
+  accountId: string,
+  provider: string,
+  text: string,
+  imageUrl?: string,
+): Promise<unknown | undefined> {
+  if (provider === "x") {
+    return proxyRequest(config, {
+      workspaceId,
+      accountId,
+      method: "POST",
+      url: "https://api.twitter.com/2/tweets",
+      body: { text: text.slice(0, 280) },
+    });
+  }
+
+  if (provider === "linkedin") {
+    const me = await proxyRequest<{ sub?: string }>(config, {
+      workspaceId,
+      accountId,
+      url: "https://api.linkedin.com/v2/userinfo",
+    });
+    if (!me.sub) throw new Error("تعذّر تحديد حساب لينكدإن — أعد الربط من صفحة التكاملات.");
+    return proxyRequest(config, {
+      workspaceId,
+      accountId,
+      method: "POST",
+      url: "https://api.linkedin.com/v2/ugcPosts",
+      headers: { "X-Restli-Protocol-Version": "2.0.0" },
+      body: {
+        author: `urn:li:person:${me.sub}`,
+        lifecycleState: "PUBLISHED",
+        specificContent: {
+          "com.linkedin.ugc.ShareContent": {
+            shareCommentary: { text },
+            shareMediaCategory: "NONE",
+          },
+        },
+        visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+      },
+    });
+  }
+
+  if (provider === "pinterest") {
+    if (!imageUrl) throw new Error("بينترست يتطلب صورة مع البِن.");
+    const boards = await proxyRequest<{ items?: { id?: string }[] }>(config, {
+      workspaceId,
+      accountId,
+      url: "https://api.pinterest.com/v5/boards?page_size=1",
+    });
+    const boardId = boards.items?.[0]?.id;
+    if (!boardId) throw new Error("لا يوجد لوح (Board) في حساب بينترست — أنشئ لوحاً ثم أعد المحاولة.");
+    return proxyRequest(config, {
+      workspaceId,
+      accountId,
+      method: "POST",
+      url: "https://api.pinterest.com/v5/pins",
+      body: {
+        board_id: boardId,
+        title: text.split("\n")[0]!.slice(0, 90),
+        description: text.slice(0, 480),
+        media_source: { source_type: "image_url", url: imageUrl },
+      },
+    });
+  }
+
+  return undefined;
 }
 
 const GRAPH = "https://graph.facebook.com/v21.0";
