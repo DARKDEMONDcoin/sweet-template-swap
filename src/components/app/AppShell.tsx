@@ -99,36 +99,45 @@ function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
 
       <WorkspaceCard />
 
-      <nav className="space-y-1">
-        {nav.map((item) => {
-          const active = item.to === "/app" ? pathname === "/app" : pathname.startsWith(item.to);
-          const badge = item.to === "/app/approvals" ? pendingCount : 0;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-bold transition-colors",
-                active ? "bg-foreground text-background" : "text-ink-soft hover:bg-secondary",
-              )}
-            >
-              <item.icon className="size-4.5 shrink-0" strokeWidth={2.2} />
-              <span className="flex-1">{item.label}</span>
-              {badge ? (
-                <span
+      <nav className="space-y-4">
+        {navGroups.map((group) => (
+          <div key={group.label || "main"} className="space-y-1">
+            {group.label ? (
+              <p className="px-3.5 pb-1 text-xs font-bold text-muted-foreground">{group.label}</p>
+            ) : null}
+            {group.items.map((item) => {
+              const active =
+                item.to === "/app" ? pathname === "/app" : pathname.startsWith(item.to);
+              const badge = item.to === "/app/approvals" ? pendingCount : 0;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={onNavigate}
                   className={cn(
-                    "rounded-full px-2 py-0.5 text-[0.7rem] font-black",
-                    active ? "bg-background/20" : "bg-coral/15 text-coral",
+                    "flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-bold transition-colors",
+                    active ? "bg-foreground text-background" : "text-ink-soft hover:bg-secondary",
                   )}
                 >
-                  {badge}
-                </span>
-              ) : null}
-            </Link>
-          );
-        })}
+                  <item.icon className="size-4.5 shrink-0" strokeWidth={2.2} />
+                  <span className="flex-1">{item.label}</span>
+                  {badge ? (
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[0.7rem] font-black",
+                        active ? "bg-background/20" : "bg-coral/15 text-coral",
+                      )}
+                    >
+                      {badge}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
+
 
       <div className="space-y-1.5">
         <p className="px-2 text-xs font-bold text-muted-foreground">فريقك</p>
