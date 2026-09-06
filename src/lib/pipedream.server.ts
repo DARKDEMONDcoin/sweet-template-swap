@@ -167,6 +167,40 @@ export async function createConnectToken(
   });
 }
 
+/**
+ * بعض المنصات (فيسبوك/إنستجرام) تعرض «ملفات صلاحيات» متعددة عند الربط،
+ * والافتراضي منها للقراءة فقط — فلا يمكن النشر. نختار تلقائياً أصغر ملف
+ * يغطي الصلاحيات المطلوبة للنشر ونمرّره في رابط الربط.
+ */
+export async function pickScopeProfile(
+  config: PipedreamConfig,
+  appSlug: string,
+  requiredScopes: string[],
+): Promise<string | null> {
+  if (!requiredScopes.length) return null;
+  try {
+    const token = await accessToken(config);
+    const res = await fetch(`${API}/apps/${encodeURIComponent(appSlug)}`, {
+      headers: { Authorization: `Bearer ${token}`, "x-pd-environment": config.environment },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      data?: { scope_profiles?: { name?: string; scopes?: string[] }[] };
+    };
+    const profiles = json.data?.scope_profiles ?? [];
+    const matching = profiles.filter(
+      (p) => p.name && requiredScopes.every((s) => (p.scopes ?? []).includes(s)),
+    );
+    if (!matching.length) return null;
+    matching.sort((a, b) => (a.scopes?.length ?? 0) - (b.scopes?.length ?? 0));
+    return matching[0]!.name!;
+  } catch (error) {
+    console.error("[pipedream] scope profile lookup failed", error);
+    return null;
+  }
+}
+
+
 export type PdAccount = {
   id: string;
   name?: string | null;
