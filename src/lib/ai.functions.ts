@@ -623,9 +623,12 @@ export const askEmployee = createServerFn({ method: "POST" })
 
     let createdTaskId: string | null = null;
     for (const deliverable of deliverables) {
-      const output = imageUrl
-        ? `![${deliverable.title}](${imageUrl})\n\n${deliverable.body!}`
+      // صورة المخرج: المولّدة، وإلا أول صورة أرفقها المستخدم بنفسه.
+      const mediaUrl = imageUrl ?? attachments.find((a) => a.type === "image")?.url ?? null;
+      const output = mediaUrl
+        ? `![${deliverable.title}](${mediaUrl})\n\n${deliverable.body!}`
         : deliverable.body!;
+
       const { data: task } = await supabase
         .from("tasks")
         .insert({
