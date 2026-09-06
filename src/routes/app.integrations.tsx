@@ -240,6 +240,17 @@ function IntegrationsPage() {
 
 
 
+  // جاء المستخدم من زر «اربط X» داخل المحادثة: نفتح ربط نفس المنصة فوراً.
+  useEffect(() => {
+    if (!autoConnect || !workspace || isLoading) return;
+    const row = (integrations ?? []).find((i) => i.provider === autoConnect);
+    setAutoConnect(null);
+    if (!row || row.status === "connected") return;
+    void toggle(row.id, row.status, row.provider);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect, workspace, isLoading, integrations]);
+
+
   return (
     <AppShell
       title="التكاملات"
