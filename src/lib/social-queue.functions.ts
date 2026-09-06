@@ -89,7 +89,6 @@ export const scheduleSocialPost = createServerFn({ method: "POST" })
       .eq("workspace_id", data.workspaceId)
       .eq("provider", data.provider)
       .eq("status", "connected")
-      .eq("healthy", true)
       .order("connected_at", { ascending: false })
       .limit(1);
     if (!account?.length) {

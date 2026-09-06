@@ -214,8 +214,20 @@ export type PdAccount = {
   id: string;
   name?: string | null;
   healthy?: boolean;
+  /** الوسيط يضعها true فقط عندما يُلغى التفويض فعلاً لدى المنصة. */
+  dead?: boolean;
   app?: { name_slug?: string; name?: string } | string;
 };
+
+/**
+ * هل الحساب صالح للاستخدام؟
+ * ملاحظة مهمة: حقل `healthy` لدى الوسيط يتأخر (يبقى false حتى أول فحص دوري)
+ * حتى للحسابات التي تعمل تماماً — الاعتماد عليه كان يمنع النشر ويعيد المستخدم
+ * إلى الربط بلا نهاية. المعيار الصحيح هو `dead`.
+ */
+export function accountUsable(account: { healthy?: boolean; dead?: boolean }): boolean {
+  return account.dead !== true;
+}
 
 /** حسابات مساحة العمل المربوطة (بدون أي بيانات اعتماد). */
 export async function listAccounts(
