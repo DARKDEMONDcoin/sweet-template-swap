@@ -53,7 +53,9 @@ const navGroups = [
   {
     label: "النمو والقياس",
     items: [
+      { to: "/app/discovery", label: "كشف العلامة", icon: Radar },
       { to: "/app/rankings", label: "تتبّع الترتيب", icon: LineChart },
+
       { to: "/app/reports", label: "التقارير", icon: FileBarChart },
       { to: "/app/brain", label: "عقل العلامة", icon: BrainCircuit },
     ],
