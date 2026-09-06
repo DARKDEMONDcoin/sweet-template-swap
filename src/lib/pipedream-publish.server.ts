@@ -12,6 +12,7 @@ import {
   proxyRequest,
   missingConfigError,
   listAccounts,
+  accountUsable,
   type PipedreamConfig,
 } from "./pipedream.server";
 import { assertMetaPublishScopes, pageTarget } from "./social-inbox.server";
@@ -42,7 +43,6 @@ async function resolveAccountId(
     .eq("workspace_id", workspaceId)
     .eq("provider", provider)
     .eq("status", "connected")
-    .eq("healthy", true)
     .order("connected_at", { ascending: false })
     .limit(1);
   if (stored?.[0]?.account_id) return stored[0].account_id;
@@ -55,7 +55,7 @@ async function resolveAccountId(
     console.error("[publish] live account lookup failed", error);
     return null;
   }
-  const account = live.find((a) => a.healthy !== false) ?? live[0];
+  const account = live.find((a) => accountUsable(a)) ?? live[0];
   if (!account) return null;
 
   const { error: saveError } = await admin.from("pipedream_accounts").upsert(
@@ -65,8 +65,8 @@ async function resolveAccountId(
       app_slug: appSlug,
       account_id: account.id,
       account_name: account.name ?? null,
-      status: account.healthy === false ? "error" : "connected",
-      healthy: account.healthy !== false,
+      status: accountUsable(account) ? "connected" : "error",
+      healthy: accountUsable(account),
     },
     { onConflict: "workspace_id,provider,account_id" },
   );

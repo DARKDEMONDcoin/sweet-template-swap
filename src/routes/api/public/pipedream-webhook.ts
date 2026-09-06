@@ -13,6 +13,7 @@ type Event = {
     id?: string;
     name?: string | null;
     healthy?: boolean;
+    dead?: boolean;
     external_id?: string;
     app?: { name_slug?: string } | string;
   };
@@ -68,7 +69,8 @@ export const Route = createFileRoute("/api/public/pipedream-webhook")({
           return new Response("ok");
         }
 
-        const healthy = payload.account?.healthy !== false && !kind.includes("ERROR");
+        // `healthy` لدى الوسيط يتأخر؛ الحساب معطّل فعلاً فقط عند dead أو حدث خطأ صريح.
+        const healthy = payload.account?.dead !== true && !kind.includes("ERROR");
         const { error: upsertError } = await supabaseAdmin.from("pipedream_accounts").upsert(
           {
             workspace_id: workspaceId,

@@ -134,8 +134,9 @@ export function explainPlatformError(raw: string): string | null {
   if (/pages_manage_posts|pages_read_engagement/.test(message) || code === 283 || (code === 200 && /permission/i.test(message))) {
     return (
       "فيسبوك رفض النشر لأن الربط لا يملك صلاحية النشر (pages_manage_posts / pages_read_engagement). " +
-      "افصل فيسبوك من صفحة التكاملات وأعد ربطه مع قبول كل الصلاحيات؛ وإن لم تُعرض هذه الصلاحيات في نافذة فيسبوك، " +
-      "فيلزم ربط تطبيق ميتا الخاص بكم (OAuth client) في إعدادات Pipedream ثم إعادة الربط."
+      "نافذة الربط الافتراضية لا تطلب هذه الصلاحيات أصلاً، لذا لا يكفي إعادة الربط وحدها. " +
+      "الحل: أنشئ تطبيق ميتا خاصاً بكم بصلاحيات Advanced Access، أضِفه كـ OAuth Client في مشروع Pipedream، " +
+      "ثم الصق معرّفه في الإعدادات ← المفاتيح باسم PIPEDREAM_OAUTH_APP_FACEBOOK وأعد ربط فيسبوك."
     );
   }
   if (code === 190) return "انتهت صلاحية ربط فيسبوك/إنستجرام — أعد ربط الحساب من صفحة التكاملات.";
@@ -214,8 +215,20 @@ export type PdAccount = {
   id: string;
   name?: string | null;
   healthy?: boolean;
+  /** الوسيط يضعها true فقط عندما يُلغى التفويض فعلاً لدى المنصة. */
+  dead?: boolean;
   app?: { name_slug?: string; name?: string } | string;
 };
+
+/**
+ * هل الحساب صالح للاستخدام؟
+ * ملاحظة مهمة: حقل `healthy` لدى الوسيط يتأخر (يبقى false حتى أول فحص دوري)
+ * حتى للحسابات التي تعمل تماماً — الاعتماد عليه كان يمنع النشر ويعيد المستخدم
+ * إلى الربط بلا نهاية. المعيار الصحيح هو `dead`.
+ */
+export function accountUsable(account: { healthy?: boolean; dead?: boolean }): boolean {
+  return account.dead !== true;
+}
 
 /** حسابات مساحة العمل المربوطة (بدون أي بيانات اعتماد). */
 export async function listAccounts(
