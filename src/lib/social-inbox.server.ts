@@ -75,13 +75,16 @@ export async function pageTarget(
   config: PipedreamConfig,
   workspaceId: string,
   accountId: string,
+  preferredPageId?: string,
 ): Promise<PageTarget | null> {
   const res = await proxyRequest<MeAccounts>(config, {
     workspaceId,
     accountId,
     url: `${GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=5`,
   });
-  const page = res.data?.[0];
+  const page =
+    (preferredPageId ? res.data?.find((candidate) => candidate.id === preferredPageId) : undefined) ??
+    res.data?.[0];
   if (!page?.access_token) return null;
   return {
     id: page.id,

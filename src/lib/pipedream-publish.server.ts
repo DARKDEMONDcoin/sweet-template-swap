@@ -35,8 +35,10 @@ async function resolveAccountId(
     .eq("workspace_id", workspaceId)
     .eq("provider", provider)
     .eq("status", "connected")
-    .maybeSingle();
-  if (stored?.account_id) return stored.account_id;
+    .eq("healthy", true)
+    .order("connected_at", { ascending: false })
+    .limit(1);
+  if (stored?.[0]?.account_id) return stored[0].account_id;
   if (!appSlug) return null;
 
   let live: Awaited<ReturnType<typeof listAccounts>> = [];
@@ -49,7 +51,7 @@ async function resolveAccountId(
   const account = live.find((a) => a.healthy !== false) ?? live[0];
   if (!account) return null;
 
-  await admin.from("pipedream_accounts").upsert(
+  const { error: saveError } = await admin.from("pipedream_accounts").upsert(
     {
       workspace_id: workspaceId,
       provider,
@@ -61,6 +63,7 @@ async function resolveAccountId(
     },
     { onConflict: "workspace_id,provider,account_id" },
   );
+  if (saveError) throw new Error(`تعذّر حفظ الحساب المربوط: ${saveError.message}`);
   await admin
     .from("integrations")
     .update({ status: "connected", account: account.name ?? appSlug })
@@ -94,6 +97,7 @@ export async function publishToPlatform(
   // لأن الإجراءات الجاهزة لا تدعم النص الكامل مع الصورة على إنستجرام.
   if (metaProxy) {
     const result = await publishMeta(
+      admin,
       config,
       params.workspaceId,
       account.account_id,
@@ -130,6 +134,7 @@ const GRAPH = "https://graph.facebook.com/v21.0";
 
 /** نشر على إنستجرام (حاوية ثم نشر) أو على صفحة فيسبوك — عبر وكيل Pipedream. */
 async function publishMeta(
+  admin: Admin,
   config: PipedreamConfig,
   workspaceId: string,
   accountId: string,
@@ -140,8 +145,24 @@ async function publishMeta(
 ): Promise<unknown> {
   // نتحقق أولاً أن الربط يملك صلاحية النشر — وإلا نشرح السبب والحل بوضوح.
   await assertMetaPublishScopes(config, workspaceId, accountId, provider);
-  const page = await pageTarget(config, workspaceId, accountId);
+  const { data: link } = await admin
+    .from("pipedream_accounts")
+    .select("page_id")
+    .eq("workspace_id", workspaceId)
+    .eq("provider", provider)
+    .eq("account_id", accountId)
+    .limit(1);
+  const page = await pageTarget(config, workspaceId, accountId, link?.[0]?.page_id ?? undefined);
   if (!page) throw new Error("تعذّر تحديد الصفحة المرتبطة بحسابك على ميتا — تأكد أنك مسؤول عن الصفحة ثم أعد الربط.");
+  if (!link?.[0]?.page_id) {
+    const { error: pageSaveError } = await admin
+      .from("pipedream_accounts")
+      .update({ page_id: page.id, instagram_business_id: page.igId ?? null })
+      .eq("workspace_id", workspaceId)
+      .eq("provider", provider)
+      .eq("account_id", accountId);
+    if (pageSaveError) console.error("[publish] failed to persist Meta page selection", pageSaveError);
+  }
 
   if (provider === "facebook") {
     // فيديو من جهاز المستخدم: يُرفع إلى الصفحة عبر رابطه العام.
@@ -225,12 +246,8 @@ async function publishMeta(
 /** اسم حقل النص يختلف بين إجراءات كل منصة. */
 function textProps(provider: string, text: string): Record<string, string> {
   switch (provider) {
-    case "instagram":
-      return { caption: text };
     case "x":
       return { text: text.slice(0, 280) };
-    case "facebook":
-      return { message: text };
     case "linkedin":
       return { text };
     case "slack":
@@ -246,10 +263,6 @@ function textProps(provider: string, text: string): Record<string, string> {
 
 function imageProps(provider: string, imageUrl: string): Record<string, string> {
   switch (provider) {
-    case "instagram":
-      return { mediaType: "image", imageUrl };
-    case "facebook":
-      return { link: imageUrl };
     case "pinterest":
       return { imageUrl, mediaSource: imageUrl };
     default:

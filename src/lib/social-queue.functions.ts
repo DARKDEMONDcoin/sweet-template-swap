@@ -80,8 +80,10 @@ export const scheduleSocialPost = createServerFn({ method: "POST" })
       .eq("workspace_id", data.workspaceId)
       .eq("provider", data.provider)
       .eq("status", "connected")
-      .maybeSingle();
-    if (!account) {
+      .eq("healthy", true)
+      .order("connected_at", { ascending: false })
+      .limit(1);
+    if (!account?.length) {
       throw new Error("هذه المنصة غير مربوطة بعد — اربطها من صفحة التكاملات ثم أعد الجدولة.");
     }
 
@@ -175,12 +177,15 @@ export const updateSocialPost = createServerFn({ method: "POST" })
       return { ok: true as const };
     }
 
-    await admin
+    const { data: retried, error: retryError } = await admin
       .from("social_posts")
       .update({ status: "scheduled", attempts: 0, locked_at: new Date().toISOString(), last_error: null })
       .eq("id", data.id)
       .eq("workspace_id", data.workspaceId)
-      .neq("status", "published");
+      .neq("status", "published")
+      .select("id");
+    if (retryError) throw new Error(retryError.message);
+    if (!retried?.length) throw new Error("هذا المنشور نُشر بالفعل ولا يمكن إعادة نشره.");
 
     const { publishQueuedPost } = await import("./social-queue.server");
     const result = await publishQueuedPost(admin, data.id);

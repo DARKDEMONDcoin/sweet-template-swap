@@ -51,6 +51,7 @@ export async function publishQueuedPost(admin: Admin, id: string): Promise<Queue
   if (!post) throw new Error("المنشور غير موجود.");
 
   const attempts = (post.attempts ?? 0) + 1;
+  const videoUrl = videoOf(post.meta);
 
   try {
     const { publishToPlatform } = await import("./pipedream-publish.server");
@@ -59,7 +60,7 @@ export async function publishQueuedPost(admin: Admin, id: string): Promise<Queue
       provider: post.provider,
       text: post.body,
       ...(post.image_url ? { imageUrl: post.image_url } : {}),
-      ...(videoOf(post.meta) ? { videoUrl: videoOf(post.meta)! } : {}),
+      ...(videoUrl ? { videoUrl } : {}),
     });
 
     await admin
@@ -88,6 +89,9 @@ export async function publishQueuedPost(admin: Admin, id: string): Promise<Queue
         status: exhausted ? "failed" : "scheduled",
         attempts,
         locked_at: null,
+        scheduled_at: exhausted
+          ? post.scheduled_at
+          : new Date(Date.now() + attempts * 2 * 60 * 1000).toISOString(),
         last_error: message.slice(0, 500),
       })
       .eq("id", post.id);
