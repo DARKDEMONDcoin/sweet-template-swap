@@ -19,6 +19,14 @@ export const KNOWN_SECRETS = [
   { name: "PIPEDREAM_PROJECT_ID", label: "Pipedream — المشروع" },
   { name: "PIPEDREAM_ENVIRONMENT", label: "Pipedream — البيئة" },
   { name: "PIPEDREAM_WEBHOOK_SECRET", label: "Pipedream — سر الويبهوك" },
+  {
+    name: "PIPEDREAM_OAUTH_APP_FACEBOOK",
+    label: "تطبيق ميتا الخاص بكم (OAuth Client ID في Pipedream) — لازم لنشر فيسبوك",
+  },
+  {
+    name: "PIPEDREAM_OAUTH_APP_INSTAGRAM",
+    label: "تطبيق ميتا الخاص بكم — لازم لنشر إنستجرام",
+  },
 ] as const;
 
 function mask(value: string): string {
