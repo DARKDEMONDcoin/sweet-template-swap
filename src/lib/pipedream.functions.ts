@@ -56,7 +56,7 @@ export const startPipedreamConnect = createServerFn({ method: "POST" })
     const app = pipedreamApp(data.provider);
     if (!app) throw new Error("هذه المنصة لا تُدار عبر Pipedream.");
 
-    const { pipedreamConfig, createConnectToken, missingConfigError } = await import(
+    const { pipedreamConfig, createConnectToken, missingConfigError, pickScopeProfile } = await import(
       "./pipedream.server"
     );
     const config = await pipedreamConfig();
@@ -73,6 +73,16 @@ export const startPipedreamConnect = createServerFn({ method: "POST" })
     url.searchParams.set("success_redirect_uri", `${origin}/app/integrations?pd=connected&provider=${data.provider}`);
     url.searchParams.set("error_redirect_uri", `${origin}/app/integrations?pd=failed`);
 
+    // ملف الصلاحيات المناسب للنشر (وإلا يفتح فيسبوك نافذة «قراءة فقط»).
+    const required = PUBLISH_SCOPES[data.provider];
+    if (required) {
+      const profile = await pickScopeProfile(config, app.slug, required);
+      if (profile) {
+        url.searchParams.set("oauthScopeProfile", profile);
+        url.searchParams.set("oauth_scope_profile", profile);
+      }
+    }
+
     // تطبيق OAuth خاص بنا لهذه المنصة (مثلاً تطبيق ميتا المعتمد بصلاحيات النشر) إن كان مضبوطاً.
     try {
       const { getSecrets } = await import("./secrets.server");
@@ -82,6 +92,7 @@ export const startPipedreamConnect = createServerFn({ method: "POST" })
     } catch {
       /* الافتراضي: تطبيق الوسيط */
     }
+
 
     return { url: url.toString(), app: app.slug, label: app.label };
   });
