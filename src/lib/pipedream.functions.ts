@@ -140,7 +140,7 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
       }
       if (scopeError) warnings.push({ provider, message: scopeError });
 
-      await admin.from("pipedream_accounts").upsert(
+      const { error: accountError } = await admin.from("pipedream_accounts").upsert(
         {
           workspace_id: data.workspaceId,
           provider,
@@ -153,6 +153,10 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
         },
         { onConflict: "workspace_id,provider,account_id" },
       );
+      if (accountError) {
+        warnings.push({ provider, message: `تعذّر حفظ الحساب المربوط: ${accountError.message}` });
+        continue;
+      }
       await admin
         .from("integrations")
         .update({
