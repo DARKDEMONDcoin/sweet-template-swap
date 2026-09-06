@@ -154,8 +154,8 @@ export function PublishPanel({ workspaceId, employeeId, taskId, channel, request
     }
   };
 
-  const run = async (mode: "now" | "later") => {
-    if (!active.length) return;
+  const run = async (mode: "now" | "later", providers = active) => {
+    if (!providers.length) return;
     if (!text.trim()) {
       setNote("نص المنشور فارغ.");
       return;
@@ -176,7 +176,7 @@ export function PublishPanel({ workspaceId, employeeId, taskId, channel, request
     const videoUrl = media?.kind === "video" ? media.url : null;
 
     for (const at of dates) {
-      for (const provider of active) {
+      for (const provider of providers) {
         if (provider === "instagram" && !media) {
           failed.push(`${appLabel(provider)}: يحتاج صورة أو فيديو`);
           continue;
@@ -230,7 +230,7 @@ export function PublishPanel({ workspaceId, employeeId, taskId, channel, request
       if (!connected.includes(provider as (typeof PUBLISHABLE)[number])) return;
       sessionStorage.removeItem(key);
       setPicked([provider]);
-      void run("now");
+      void run("now", [provider]);
     } catch {
       sessionStorage.removeItem(key);
     }
