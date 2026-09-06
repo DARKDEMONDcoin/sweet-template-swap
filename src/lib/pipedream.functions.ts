@@ -119,7 +119,7 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => z.object({ workspaceId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     const admin = await assertOwner(context.supabase, data.workspaceId);
-    const { pipedreamConfig, listAccounts, missingConfigError } =
+    const { pipedreamConfig, listAccounts, missingConfigError, accountUsable } =
       await import("./pipedream.server");
     const { pipedreamApps } = await import("@/data/pipedream-apps");
     const config = await pipedreamConfig();
@@ -138,7 +138,8 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
 
       // فيسبوك/إنستجرام: نتحقق فوراً أن الربط يملك صلاحية النشر، لا العرض فقط.
       let scopeError: string | null = null;
-      if ((provider === "facebook" || provider === "instagram") && account.healthy !== false) {
+      const usable = accountUsable(account);
+      if ((provider === "facebook" || provider === "instagram") && usable) {
         try {
           const { metaPermissions, META_PUBLISH_SCOPES, missingMetaScopesMessage } =
             await import("./social-inbox.server");
@@ -158,8 +159,8 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
           app_slug: slug,
           account_id: account.id,
           account_name: account.name ?? null,
-          status: account.healthy === false ? "error" : "connected",
-          healthy: account.healthy !== false,
+          status: usable ? "connected" : "error",
+          healthy: usable,
           last_error: scopeError,
         },
         { onConflict: "workspace_id,provider,account_id" },
@@ -171,7 +172,7 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
       await admin
         .from("integrations")
         .update({
-          status: account.healthy === false ? "error" : "connected",
+          status: usable ? "connected" : "error",
           account: account.name ?? slug,
         })
         .eq("workspace_id", data.workspaceId)
