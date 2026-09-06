@@ -48,6 +48,7 @@ export const startPipedreamConnect = createServerFn({ method: "POST" })
         workspaceId: z.string().uuid(),
         provider: z.string().min(1).max(40),
         origin: z.string().url(),
+        returnTo: z.string().max(300).optional(),
       })
       .parse(input),
   )
@@ -77,7 +78,8 @@ export const startPipedreamConnect = createServerFn({ method: "POST" })
     url.searchParams.set("app", app.slug);
     url.searchParams.set(
       "success_redirect_uri",
-      `${origin}/app/integrations?pd=connected&provider=${data.provider}`,
+      `${origin}/app/integrations?pd=connected&provider=${data.provider}` +
+        (data.returnTo && data.returnTo.startsWith("/") ? `&back=${encodeURIComponent(data.returnTo)}` : ""),
     );
     url.searchParams.set("error_redirect_uri", `${origin}/app/integrations?pd=failed`);
 

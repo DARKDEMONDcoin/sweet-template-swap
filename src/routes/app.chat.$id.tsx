@@ -6,6 +6,7 @@ import { Send, Settings2, Loader2, Check, Copy, Sparkles, ArrowUpLeft, Link2, Fi
 
 import { AppShell } from "@/components/app/AppShell";
 import { AppIcon, appLabel } from "@/components/site/AppIcon";
+import { ConnectNow } from "@/components/app/ConnectNow";
 import { getMember } from "@/data/team";
 import { integrationStatusLabel } from "@/data/app";
 import { useBrainItems, useConversations, useCreateConversation, useDeleteConversation, useIntegrations, useMessages, useRenameConversation, useWorkspace } from "@/lib/data";
@@ -585,12 +586,14 @@ function ChatPage() {
                         wpConnected ? (
                           <PublishToWordPress workspaceId={workspace.id} body={m.body} />
                         ) : (
-                          <Link
-                            to="/app/integrations"
-                            className="mt-3 inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-bold transition-colors hover:bg-secondary"
-                          >
-                            <Link2 className="size-3.5" /> اربط ووردبريس لنشر المقال كمسودة بضغطة
-                          </Link>
+                          <span className="mt-3 inline-flex">
+                            <ConnectNow
+                              workspaceId={workspace.id}
+                              provider="wordpress"
+                              size="sm"
+                              label="اربط ووردبريس وانشر المقال"
+                            />
+                          </span>
                         )
                       ) : null}
                       {!isUser &&
@@ -676,12 +679,11 @@ function ChatPage() {
                   <b>{appLabel(needsConnection.provider)}</b>
                   {needsConnection.reason ? ` — ${needsConnection.reason}` : ""}. دقيقة واحدة عبر OAuth الرسمي.
                 </span>
-                <Link
-                  to="/app/integrations"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-4 py-1.5 text-xs font-bold text-background transition-transform hover:-translate-y-0.5"
-                >
-                  <Link2 className="size-3.5" /> اربط {appLabel(needsConnection.provider)}
-                </Link>
+                <ConnectNow
+                  workspaceId={workspace?.id}
+                  provider={needsConnection.provider}
+                  size="sm"
+                />
                 <button
                   onClick={() => setNeedsConnection(null)}
                   className="text-xs text-muted-foreground hover:text-foreground"
