@@ -79,6 +79,9 @@ function IntegrationsPage() {
   const [ghostOpen, setGhostOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingSync, setPendingSync] = useState(false);
+  // العودة إلى الصفحة التي بدأ منها الربط، وفتح ربط منصة بعينها مباشرة.
+  const [backTo, setBackTo] = useState<string | null>(null);
+  const [autoConnect, setAutoConnect] = useState<string | null>(null);
 
   useEffect(() => {
     void supabase.auth
@@ -100,7 +103,11 @@ function IntegrationsPage() {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("gsc");
     const pd = params.get("pd");
-    if (!status && !pd) return;
+    const want = params.get("connect");
+    if (want) setAutoConnect(want);
+    const back = params.get("back");
+    if (back && back.startsWith("/")) setBackTo(back);
+    if (!status && !pd && !want && !back) return;
     if (status === "connected") setGscOpen(true);
     else if (status) setError(gscMessages[status] ?? "تعذّر إكمال ربط Search Console.");
     if (pd === "failed") setError("لم يكتمل الربط عبر Pipedream — جرّب مرة أخرى.");
@@ -119,10 +126,16 @@ function IntegrationsPage() {
     void syncAccounts({ data: { workspaceId: workspace.id } })
       .then((r) => {
         setScopeWarnings(r.warnings ?? []);
-        return qc.invalidateQueries({ queryKey: ["integrations", workspace.id] });
+        const done = qc.invalidateQueries({ queryKey: ["integrations", workspace.id] });
+        if (backTo && !(r.warnings ?? []).length) {
+          const to = backTo;
+          setBackTo(null);
+          setTimeout(() => window.location.assign(to), 400);
+        }
+        return done;
       })
       .catch(() => setError("تم الربط لكن تعذّرت المزامنة — اضغط «تحديث الحسابات»."));
-  }, [pendingSync, workspace, qc, syncAccounts]);
+  }, [pendingSync, workspace, qc, syncAccounts, backTo]);
 
   const all = integrations ?? [];
   const connected = all.filter((i) => i.status === "connected").length;
