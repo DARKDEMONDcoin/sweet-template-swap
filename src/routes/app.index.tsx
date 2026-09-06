@@ -82,7 +82,10 @@ function AppHome() {
         ))}
       </div>
 
+      <ActivationMap className="mt-6" />
+
       {workspace ? <MorningBriefingCard className="mt-6" workspaceId={workspace.id} /> : null}
+
 
       {workspace ? (
         <BusinessProfileCard
