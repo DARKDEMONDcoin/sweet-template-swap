@@ -270,11 +270,13 @@ export async function ownedHeroImage(
   client: { storage: { from: (b: string) => { upload: (p: string, f: Blob, o?: Record<string, unknown>) => Promise<{ error: unknown }>; createSignedUrl: (p: string, s: number) => Promise<{ data: { signedUrl: string } | null }> } } },
   workspaceId: string,
   prompt: string,
+  opts: ImageOptions = {},
 ): Promise<string> {
-  const fallback = imageUrl(prompt);
+  const fallback = imageUrl(prompt, opts);
   try {
-    const image = await generateImageBytes(prompt);
+    const image = await generateImageBytes(prompt, opts);
     if (!image) return fallback;
+
     const ext = image.contentType.includes("png") ? "png" : "jpg";
     const path = `${workspaceId}/hero/${crypto.randomUUID()}.${ext}`;
     const bucket = client.storage.from("nour-media");
