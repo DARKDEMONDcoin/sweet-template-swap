@@ -107,12 +107,24 @@ export const discoverBrand = createServerFn({ method: "POST" })
       .trim()
       .slice(0, 60) || profile.name;
 
+    /** أسماء المنافسين قد تأتي كنص لا كنطاق — نحوّلها لنطاق نظيف ونتجاهل ما لا يصلح. */
+    const rivalDomains = [
+      ...new Set(
+        profile.competitors
+          .map((c) => {
+            const raw = c.trim().replace(/^https?:\/\//i, "").replace(/^www\./, "").split(/[\s/?#]/)[0] ?? "";
+            return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(raw) ? raw.toLowerCase() : "";
+          })
+          .filter(Boolean),
+      ),
+    ].slice(0, 3);
+
     const [audit, expansion, rivals] = await Promise.all([
-      withBudget(auditPage(data.url), 20_000, null as SeoAudit | null).catch(() => null),
-      withBudget(keywordExpansion(seed), 15_000, null).catch(() => null),
+      withBudget(auditPage(data.url), 25_000, null as SeoAudit | null).catch(() => null),
+      withBudget(keywordExpansion(seed), 25_000, null).catch(() => null),
       Promise.all(
-        profile.competitors.slice(0, 3).map((c) =>
-          withBudget(competitorInventory(c), 12_000, null).catch(() => null),
+        rivalDomains.map((c) =>
+          withBudget(competitorInventory(c), 15_000, null).catch(() => null),
         ),
       ),
     ]);
@@ -125,6 +137,14 @@ export const discoverBrand = createServerFn({ method: "POST" })
     take(expansion?.local, "محلية", 2);
     take(expansion?.commercial, "مقارنة", 2);
     take(expansion?.informational, "معلوماتية", 3);
+    // احتياط: إن لم تُصنَّف أي نية، نقيس الاقتراحات الخام أو بذرة النشاط نفسها.
+    if (!picks.length) {
+      const fallback = (expansion?.suggestions ?? []).slice(0, 5);
+      (fallback.length ? fallback : [seed, profile.industry].filter(Boolean)).forEach((k) =>
+        picks.push({ keyword: k, intent: "معلوماتية" }),
+      );
+    }
+
 
     const opportunities: DiscoveryOpportunity[] = (
       await Promise.all(
