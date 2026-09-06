@@ -14,7 +14,7 @@ import {
   Trash2,
   Film,
 } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { ConnectNow } from "@/components/app/ConnectNow";
 
 import { AppIcon, appLabel } from "@/components/site/AppIcon";
 import { useConnectedAccounts } from "@/lib/data";
@@ -223,13 +223,11 @@ export function PublishPanel({ workspaceId, employeeId, taskId, channel, request
 
   if (!connected.length) {
     return (
-      <Link
-        to="/app/integrations"
-        className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-bold transition-colors hover:bg-secondary"
-      >
-        <Link2 className="size-4" />
-        {requested[0] ? `اربط ${providerLabel(requested[0])} للنشر مباشرة` : "اربط حساباتك للنشر المباشر"}
-      </Link>
+      <ConnectNow
+        workspaceId={workspaceId}
+        provider={requested[0] ?? "facebook"}
+        label={requested[0] ? `اربط ${providerLabel(requested[0])} وانشر` : "اربط حسابك للنشر المباشر"}
+      />
     );
   }
 
@@ -250,15 +248,14 @@ export function PublishPanel({ workspaceId, employeeId, taskId, channel, request
           </button>
         ))}
         {missing.map((p) => (
-          <Link
+          <ConnectNow
             key={p}
-            to="/app/integrations"
+            workspaceId={workspaceId}
+            provider={p}
+            size="sm"
+            label={`${providerLabel(p)} · اربطه`}
             className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-amber/60 bg-amber/10 px-3 py-1.5 text-xs font-bold text-ink-soft hover:bg-amber/20"
-            title={`${providerLabel(p)} غير مربوط — اضغط للربط`}
-          >
-            <AppIcon name={p} className="size-3.5" />
-            {providerLabel(p)} · اربطه أولاً
-          </Link>
+          />
         ))}
       </div>
       {missing.length && !active.length ? (
