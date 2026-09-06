@@ -8,6 +8,12 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { pipedreamApp } from "@/data/pipedream-apps";
 
+/** الصلاحيات اللازمة فعلياً للنشر على كل منصة (لاختيار ملف الصلاحيات عند الربط). */
+const PUBLISH_SCOPES: Record<string, string[]> = {
+  facebook: ["pages_manage_posts", "pages_read_engagement", "pages_show_list"],
+  instagram: ["instagram_content_publish"],
+};
+
 async function assertOwner(
   supabase: {
     rpc: (
