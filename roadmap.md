@@ -14,5 +14,7 @@
 3. [x] World-class brand & website discovery report at /app/discovery (audit, keyword
        opportunities with our rank, competitors, social presence, prioritized actions).
 4. [x] Post-signup activation map on the overview page, computed from real data.
-5. [ ] End-to-end integration tests per employee, in parallel.
+5. [x] End-to-end chat tests for all six employees in parallel — all produce real,
+       well-formatted Arabic deliverables; deliverable wording now matches the output kind.
+
 
