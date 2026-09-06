@@ -105,6 +105,12 @@ async function call<T>(
     if (text.includes("Auth provision not found")) {
       throw new Error("الحساب لم يعد مربوطاً — أعد ربطه من صفحة التكاملات ثم أعد المحاولة.");
     }
+    if (text.includes("not available on your current plan")) {
+      throw new Error(
+        "هذه المنصة تحتاج تنفيذ إجراء جاهز لدى الوسيط، وهو غير مفعّل في باقة الوسيط الحالية. " +
+          "المنصات الأساسية (فيسبوك، إنستجرام، إكس، لينكدإن، بينترست) تنشر مباشرة دون هذا القيد.",
+      );
+    }
     // طلبات الوكيل تنقل خطأ المنصة نفسها، لا خطأ الوسيط — نترجمه لسبب وحل مفهومين.
     const friendly = explainPlatformError(text);
     if (friendly) throw new Error(friendly);
