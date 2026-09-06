@@ -561,6 +561,50 @@ export type Database = {
         }
         Relationships: []
       }
+      site_assets: {
+        Row: {
+          alt: string | null
+          created_at: string
+          id: string
+          kind: string
+          page_url: string | null
+          source: string
+          url: string
+          weight: number
+          workspace_id: string
+        }
+        Insert: {
+          alt?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          page_url?: string | null
+          source?: string
+          url: string
+          weight?: number
+          workspace_id: string
+        }
+        Update: {
+          alt?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          page_url?: string | null
+          source?: string
+          url?: string
+          weight?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_assets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_autopilot: {
         Row: {
           active: boolean
