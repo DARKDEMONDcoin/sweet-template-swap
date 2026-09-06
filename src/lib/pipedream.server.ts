@@ -157,12 +157,15 @@ export async function createConnectToken(
   config: PipedreamConfig,
   workspaceId: string,
   allowedOrigins: string[],
+  redirects?: { success?: string; error?: string },
 ): Promise<ConnectToken> {
   return call<ConnectToken>(config, "/tokens", {
     method: "POST",
     body: JSON.stringify({
       external_user_id: externalUserId(workspaceId),
       allowed_origins: allowedOrigins,
+      ...(redirects?.success ? { success_redirect_uri: redirects.success } : {}),
+      ...(redirects?.error ? { error_redirect_uri: redirects.error } : {}),
     }),
   });
 }
