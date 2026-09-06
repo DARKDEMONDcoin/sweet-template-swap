@@ -308,6 +308,8 @@ export function useConnectedAccounts(workspaceId?: string) {
   return useQuery({
     queryKey: ["pipedream-accounts", workspaceId],
     enabled: !!workspaceId,
+    // OAuth happens outside the app; always refresh when the user returns to the publishing screen.
+    refetchOnMount: "always",
     queryFn: () =>
       must<PipedreamAccount[]>(
         supabase

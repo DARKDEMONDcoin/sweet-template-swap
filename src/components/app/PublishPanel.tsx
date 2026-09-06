@@ -213,6 +213,31 @@ export function PublishPanel({ workspaceId, employeeId, taskId, channel, request
     setBusy(null);
   };
 
+  // «اربط وانشر» أمر واحد: بعد اكتمال OAuth وظهور الحساب، ننفذ النشر مرة واحدة.
+  useEffect(() => {
+    if (isLoading || busy || !connected.length) return;
+    const key = `publish-after-connect:${workspaceId}`;
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return;
+    try {
+      const pending = JSON.parse(raw) as { provider?: unknown; createdAt?: unknown };
+      const provider = typeof pending.provider === "string" ? pending.provider : null;
+      const createdAt = typeof pending.createdAt === "number" ? pending.createdAt : 0;
+      if (!provider || Date.now() - createdAt > 15 * 60 * 1000) {
+        sessionStorage.removeItem(key);
+        return;
+      }
+      if (!connected.includes(provider as (typeof PUBLISHABLE)[number])) return;
+      sessionStorage.removeItem(key);
+      setPicked([provider]);
+      void run("now");
+    } catch {
+      sessionStorage.removeItem(key);
+    }
+    // run intentionally uses the current post text/media captured after the account query refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, connected, workspaceId]);
+
   if (isLoading) {
     return (
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -227,6 +252,7 @@ export function PublishPanel({ workspaceId, employeeId, taskId, channel, request
         workspaceId={workspaceId}
         provider={requested[0] ?? "facebook"}
         label={requested[0] ? `اربط ${providerLabel(requested[0])} وانشر` : "اربط حسابك للنشر المباشر"}
+        publishAfterConnect={Boolean(requested[0])}
       />
     );
   }
