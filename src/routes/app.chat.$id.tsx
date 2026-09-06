@@ -403,6 +403,10 @@ function ChatPage() {
       await qc.invalidateQueries({ queryKey: ["messages", workspace?.id, id, conversationId] });
       setPending(null);
       setPendingText(null);
+      // المرفقات ووصف الصورة يخصّان الرسالة المُرسلة فقط.
+      setAttachments([]);
+      setImagePrompt("");
+
       setSavedTask(Boolean(res?.createdTaskId));
       setNeedsConnection(res?.needsConnection ?? null);
       void qc.invalidateQueries({ queryKey: ["messages-last", workspace?.id] });
