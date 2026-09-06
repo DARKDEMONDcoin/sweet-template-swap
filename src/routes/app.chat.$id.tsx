@@ -18,6 +18,8 @@ import { requestedPublishTargets } from "@/lib/platforms";
 import { PublishToWordPress } from "@/components/app/PublishToWordPress";
 import { ActionPanel } from "@/components/app/ActionPanel";
 import { Portrait } from "@/components/site/Portrait";
+import { MediaStudio, type Attachment, type ImageMode, type Aspect } from "@/components/app/MediaStudio";
+
 
 import { featuredSkillsFor, skillsFor, type Skill } from "@/data/skills";
 import { cn } from "@/lib/utils";
@@ -348,6 +350,13 @@ function ChatPage() {
 
   const [error, setError] = useState<string | null>(null);
 
+  // حرية الوسائط: مرفقات المستخدم + قراره في الصورة التلقائية + نسبة الأبعاد.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [imageMode, setImageMode] = useState<ImageMode>("auto");
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [aspect, setAspect] = useState<Aspect>("square");
+
+
   useEffect(() => {
     if (!conversationId && conversations?.[0]) setConversationId(conversations[0].id);
     if (conversationId && conversations && !conversations.some((c) => c.id === conversationId)) {
@@ -377,7 +386,19 @@ function ChatPage() {
 
   const send = useMutation({
     mutationFn: (message: string) =>
-      ask({ data: { workspaceId: workspace!.id, employeeId: id, conversationId: conversationId!, message } }),
+      ask({
+        data: {
+          workspaceId: workspace!.id,
+          employeeId: id,
+          conversationId: conversationId!,
+          message,
+          attachments,
+          imageMode,
+          imagePrompt: imagePrompt.trim() || undefined,
+          imageAspect: aspect,
+        },
+      }),
+
     onSuccess: async (res) => {
       await qc.invalidateQueries({ queryKey: ["messages", workspace?.id, id, conversationId] });
       setPending(null);
@@ -707,7 +728,22 @@ function ChatPage() {
                 dir="auto"
                 className="max-h-40 min-h-11 w-full resize-none bg-transparent px-3 py-2.5 outline-none placeholder:text-muted-foreground/80"
               />
+              <div className="px-1 pb-1">
+                <MediaStudio
+                  workspaceId={workspace?.id}
+                  attachments={attachments}
+                  onAttachmentsChange={setAttachments}
+                  imageMode={imageMode}
+                  onImageModeChange={setImageMode}
+                  imagePrompt={imagePrompt}
+                  onImagePromptChange={setImagePrompt}
+                  aspect={aspect}
+                  onAspectChange={setAspect}
+                  disabled={busy}
+                />
+              </div>
               <div className="flex items-center gap-2 px-1 pb-0.5">
+
                 <SkillPalette
                   skills={employeeSkills}
                   quick={quickSkills}

@@ -133,7 +133,23 @@ const input = z.object({
   employeeId: z.string().min(1),
   message: z.string().min(1).max(4000),
   conversationId: z.string().uuid(),
+  /** وسائط أرفقها المستخدم (صور/فيديو) — تُحفظ داخل رسالته وتُعرض في المحادثة. */
+  attachments: z
+    .array(
+      z.object({
+        url: z.string().url().max(2000),
+        type: z.enum(["image", "video"]).default("image"),
+        alt: z.string().max(160).optional(),
+      }),
+    )
+    .max(8)
+    .optional(),
+  /** تحكّم المستخدم في الصورة التلقائية: تلقائي · إيقاف · وصف يكتبه بنفسه. */
+  imageMode: z.enum(["auto", "off", "manual"]).optional(),
+  imagePrompt: z.string().max(900).optional(),
+  imageAspect: z.enum(["square", "portrait", "landscape", "story"]).optional(),
 });
+
 
 /** الموظفون الذين تُولَّد لهم صورة فعلية عند وجود وصف بصري في الرد. */
 const VISUAL_EMPLOYEES = new Set(["dana", "sonny", "nour"]);
@@ -219,17 +235,28 @@ export const askEmployee = createServerFn({ method: "POST" })
       country?: string | null;
     };
 
+    // وسائط المستخدم تُحفظ داخل نص رسالته لتظهر في المحادثة وتبقى في السجل.
+    const attachments = data.attachments ?? [];
+    const attachmentsMarkdown = attachments
+      .map((a) =>
+        a.type === "video"
+          ? `\n\n🎬 [${a.alt ?? "فيديو مرفق"}](${a.url})`
+          : `\n\n![${a.alt ?? "صورة مرفقة"}](${a.url})`,
+      )
+      .join("");
+
     const { data: userRow, error: insertUserError } = await supabase
       .from("messages")
       .insert({
         workspace_id: data.workspaceId,
         employee_id: data.employeeId,
         role: "user",
-        body: data.message,
+        body: `${data.message}${attachmentsMarkdown}`,
         conversation_id: data.conversationId,
       })
       .select("id")
       .single();
+
     if (insertUserError) throw new Error(insertUserError.message);
 
     const { durableMemoryItems, extractExplicitMemories, memoryBlock } =
@@ -379,13 +406,28 @@ export const askEmployee = createServerFn({ method: "POST" })
       .reverse()
       .map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.body }));
 
+    // نُعلم الموظف بوسائط المستخدم وبقراره حول الصورة حتى يبني عليها بدل تجاهلها.
+    const mediaNote = [
+      attachments.length
+        ? `(المستخدم أرفق ${attachments.filter((a) => a.type === "image").length} صورة و${attachments.filter((a) => a.type === "video").length} فيديو مع الطلب — اعتمدها كوسائط المنشور ولا تطلب غيرها.)`
+        : "",
+      data.imageMode === "off" ? "(المستخدم أوقف توليد الصور — لا تكتب image_prompt.)" : "",
+      data.imageMode === "manual" && data.imagePrompt
+        ? `(المستخدم كتب وصف الصورة بنفسه: ${data.imagePrompt.slice(0, 300)} — لا تغيّره.)`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const userTurn = mediaNote ? `${data.message}\n\n${mediaNote}` : data.message;
+
     let raw = await freeChat(
       apiKey,
       [
         { role: "system", content: system },
         ...priorMessages,
-        { role: "user", content: data.message },
+        { role: "user", content: userTurn },
       ],
+
       // طلبات المقالات/الخطط الكاملة تحتاج مخرجاً طويلاً ومهلة أطول — مع سقف زمني إجمالي حتى لا يعلّق الشات.
       longForm
         ? { json: true, timeoutMs: 75_000, maxTokens: 6000, budgetMs: 130_000 }
@@ -495,10 +537,19 @@ export const askEmployee = createServerFn({ method: "POST" })
     }
 
     // الصور تُولَّد فعلياً — لا يبقى المستخدم مع «برومبت» مكتوب فقط.
+    // والمستخدم هو صاحب القرار: إيقاف · تلقائي · وصف يكتبه بنفسه (يُترجم حرفياً بلا إضافة).
     let imageUrl: string | null = null;
-    if (VISUAL_EMPLOYEES.has(data.employeeId)) {
+    const imageMode = data.imageMode ?? "auto";
+    const userImagePrompt = data.imagePrompt?.trim() ?? "";
+    const wantsImage =
+      imageMode === "manual"
+        ? userImagePrompt.length > 2
+        : imageMode !== "off" &&
+          VISUAL_EMPLOYEES.has(data.employeeId) &&
+          attachments.every((a) => a.type !== "image");
+    if (wantsImage) {
       try {
-        const { ownedHeroImage, extractImagePrompt, imageBrief } =
+        const { ownedHeroImage, extractImagePrompt, imageBrief, literalBrief, aspectSize } =
           await import("./image-gen.server");
         const fromField = deliverables
           .map((d) => d.image_prompt)
@@ -507,30 +558,37 @@ export const askEmployee = createServerFn({ method: "POST" })
           (fromField ? fromField.trim() : null) ??
           extractImagePrompt(`${reply}\n${deliverables.map((d) => d.body ?? "").join("\n")}`);
         const wantsVisual =
-          Boolean(draft) || deliverables.some((d) => d.body && d.body.length > 80);
+          imageMode === "manual" ||
+          Boolean(draft) ||
+          deliverables.some((d) => d.body && d.body.length > 80);
         if (wantsVisual) {
-          // «مخرج صور»: الوصف يُشتق من طلب المستخدم نفسه ومن المخرج، حتى تعكس الصورة الموضوع فعلاً.
-          const prompt = await imageBrief({
-            request: data.message,
-            title: deliverables[0]?.title ?? null,
-            body: deliverables[0]?.body ?? reply,
-            brand: {
-              name: workspace?.name,
-              industry: workspace?.industry,
-              country: workspace?.country ?? null,
-            },
-            draft,
-          });
+          // وصف المستخدم يُحترم حرفياً؛ وإلا يُشتق الوصف من طلبه ومن المخرج نفسه.
+          const prompt =
+            imageMode === "manual"
+              ? await literalBrief(userImagePrompt)
+              : await imageBrief({
+                  request: data.message,
+                  title: deliverables[0]?.title ?? null,
+                  body: deliverables[0]?.body ?? reply,
+                  brand: {
+                    name: workspace?.name,
+                    industry: workspace?.industry,
+                    country: workspace?.country ?? null,
+                  },
+                  draft,
+                });
           imageUrl = await ownedHeroImage(
             supabase as unknown as Parameters<typeof ownedHeroImage>[0],
             data.workspaceId,
             prompt,
+            aspectSize(data.imageAspect ?? "landscape"),
           );
         }
       } catch (error) {
         console.error("[chat] image generation failed:", error);
       }
     }
+
 
     reply = sanitizeActionClaims(reply, connected);
     const footers = toolBlocks.map((t) => t.footer).filter(Boolean);
@@ -565,9 +623,12 @@ export const askEmployee = createServerFn({ method: "POST" })
 
     let createdTaskId: string | null = null;
     for (const deliverable of deliverables) {
-      const output = imageUrl
-        ? `![${deliverable.title}](${imageUrl})\n\n${deliverable.body!}`
+      // صورة المخرج: المولّدة، وإلا أول صورة أرفقها المستخدم بنفسه.
+      const mediaUrl = imageUrl ?? attachments.find((a) => a.type === "image")?.url ?? null;
+      const output = mediaUrl
+        ? `![${deliverable.title}](${mediaUrl})\n\n${deliverable.body!}`
         : deliverable.body!;
+
       const { data: task } = await supabase
         .from("tasks")
         .insert({
