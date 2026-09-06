@@ -235,17 +235,28 @@ export const askEmployee = createServerFn({ method: "POST" })
       country?: string | null;
     };
 
+    // وسائط المستخدم تُحفظ داخل نص رسالته لتظهر في المحادثة وتبقى في السجل.
+    const attachments = data.attachments ?? [];
+    const attachmentsMarkdown = attachments
+      .map((a) =>
+        a.type === "video"
+          ? `\n\n🎬 [${a.alt ?? "فيديو مرفق"}](${a.url})`
+          : `\n\n![${a.alt ?? "صورة مرفقة"}](${a.url})`,
+      )
+      .join("");
+
     const { data: userRow, error: insertUserError } = await supabase
       .from("messages")
       .insert({
         workspace_id: data.workspaceId,
         employee_id: data.employeeId,
         role: "user",
-        body: data.message,
+        body: `${data.message}${attachmentsMarkdown}`,
         conversation_id: data.conversationId,
       })
       .select("id")
       .single();
+
     if (insertUserError) throw new Error(insertUserError.message);
 
     const { durableMemoryItems, extractExplicitMemories, memoryBlock } =
