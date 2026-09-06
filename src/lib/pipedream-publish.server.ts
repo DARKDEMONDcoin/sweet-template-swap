@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/integrations/supabase/types";
 import { pipedreamApp } from "@/data/pipedream-apps";
-import { pipedreamConfig, runAction, proxyRequest, missingConfigError, type PipedreamConfig } from "./pipedream.server";
+import { pipedreamConfig, runAction, proxyRequest, missingConfigError, listAccounts, type PipedreamConfig } from "./pipedream.server";
 import { assertMetaPublishScopes, pageTarget } from "./social-inbox.server";
 
 type Admin = SupabaseClient<Database>;
@@ -16,6 +16,60 @@ export type PublishResult = {
   accountId: string;
   result: unknown;
 };
+
+/**
+ * معرّف الحساب المربوط: من قاعدتنا أولاً، وإن لم يوجد نسأل Pipedream مباشرة
+ * (الربط قد يكون تم للتو أو لم تُشغَّل المزامنة) ونحفظ النتيجة — فلا يفشل النشر
+ * بحجة «غير مربوط» بينما الحساب مربوط فعلاً لدى الوسيط.
+ */
+async function resolveAccountId(
+  admin: Admin,
+  config: PipedreamConfig,
+  workspaceId: string,
+  provider: string,
+  appSlug?: string,
+): Promise<string | null> {
+  const { data: stored } = await admin
+    .from("pipedream_accounts")
+    .select("account_id")
+    .eq("workspace_id", workspaceId)
+    .eq("provider", provider)
+    .eq("status", "connected")
+    .maybeSingle();
+  if (stored?.account_id) return stored.account_id;
+  if (!appSlug) return null;
+
+  let live: Awaited<ReturnType<typeof listAccounts>> = [];
+  try {
+    live = await listAccounts(config, workspaceId, appSlug);
+  } catch (error) {
+    console.error("[publish] live account lookup failed", error);
+    return null;
+  }
+  const account = live.find((a) => a.healthy !== false) ?? live[0];
+  if (!account) return null;
+
+  await admin.from("pipedream_accounts").upsert(
+    {
+      workspace_id: workspaceId,
+      provider,
+      app_slug: appSlug,
+      account_id: account.id,
+      account_name: account.name ?? null,
+      status: account.healthy === false ? "error" : "connected",
+      healthy: account.healthy !== false,
+    },
+    { onConflict: "workspace_id,provider,account_id" },
+  );
+  await admin
+    .from("integrations")
+    .update({ status: "connected", account: account.name ?? appSlug })
+    .eq("workspace_id", workspaceId)
+    .eq("provider", provider);
+
+  return account.id;
+}
+
 
 export async function publishToPlatform(
   admin: Admin,
@@ -30,15 +84,11 @@ export async function publishToPlatform(
   const config = await pipedreamConfig();
   if (!config) throw missingConfigError();
 
-  const { data: account } = await admin
-    .from("pipedream_accounts")
-    .select("account_id")
-    .eq("workspace_id", params.workspaceId)
-    .eq("provider", params.provider)
-    .eq("status", "connected")
-    .maybeSingle();
+  const accountId = await resolveAccountId(admin, config, params.workspaceId, params.provider, app?.slug);
+  if (!accountId)
+    throw new Error(`${app?.label ?? params.provider} غير مربوط بعد — اربطه من صفحة التكاملات.`);
+  const account = { account_id: accountId };
 
-  if (!account) throw new Error(`${app?.label ?? params.provider} غير مربوط بعد — اربطه من صفحة التكاملات.`);
 
   // ميتا (إنستجرام/فيسبوك): ننشر عبر Graph API مباشرة من خلال وكيل Pipedream،
   // لأن الإجراءات الجاهزة لا تدعم النص الكامل مع الصورة على إنستجرام.
