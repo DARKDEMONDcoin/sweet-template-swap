@@ -4,20 +4,43 @@ import { Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { guestSession } from "@/lib/guest.functions";
 
+/**
+ * فتح جلسة التجربة مرة واحدة فقط لكل تبويب: عدة نداءات متوازية (فتح أكثر من صفحة
+ * في نفس اللحظة) كانت تُبطل رمز الدخول السابق فيظهر خطأ 403.
+ */
+let guestLogin: Promise<{ id: string } & Record<string, unknown>> | null = null;
+
+async function openGuestSession() {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { tokenHash } = await guestSession();
+    const { data: verified, error } = await supabase.auth.verifyOtp({
+      type: "email",
+      token_hash: tokenHash,
+    });
+    if (!error && verified.user) return verified.user;
+    // رمز أُبطل بسبب نداء متزامن: نعيد المحاولة مرة واحدة برمز جديد.
+    const { data: retry } = await supabase.auth.getUser();
+    if (retry.user) return retry.user;
+    if (attempt === 1) throw new Error(error?.message ?? "تعذّر فتح جلسة التجربة");
+  }
+  throw new Error("تعذّر فتح جلسة التجربة");
+}
+
 export const Route = createFileRoute("/app")({
   ssr: false,
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (data.user) return { user: data.user };
 
-    // لا تسجيل: نفتح جلسة تجربة تلقائياً
-    const { tokenHash } = await guestSession();
-    const { data: verified, error } = await supabase.auth.verifyOtp({
-      type: "email",
-      token_hash: tokenHash,
-    });
-    if (error || !verified.user) throw new Error(error?.message ?? "تعذّر فتح جلسة التجربة");
-    return { user: verified.user };
+    // لا تسجيل: نفتح جلسة تجربة تلقائياً (نداء واحد مشترك لكل المحاولات المتوازية).
+    guestLogin ??= openGuestSession() as Promise<{ id: string } & Record<string, unknown>>;
+    try {
+      const user = await guestLogin;
+      return { user };
+    } catch (e) {
+      guestLogin = null;
+      throw e;
+    }
   },
   head: () => ({ meta: [{ name: "robots", content: "noindex" }] }),
   pendingMs: 150,
