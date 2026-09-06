@@ -10,8 +10,11 @@
 
 1. [x] Media freedom in chat: user-controlled image generation (literal prompt fidelity,
        1-4 images, 4 aspect ratios), attach multiple images/videos, or turn images off.
-2. [ ] Merge redundant app sections into the chat where possible; keep only essential pages.
-3. [ ] World-class brand & website discovery (deep audit surface: SERP, competitors,
-       technical SEO, brand mentions, social presence) shown to the user in one report.
-4. [ ] Post-signup service logic/map: what appears first, guided real activation path.
-5. [ ] End-to-end integration tests per employee, in parallel.
+2. [x] Merge redundant app sections into grouped nav; keep only essential pages.
+3. [x] World-class brand & website discovery report at /app/discovery (audit, keyword
+       opportunities with our rank, competitors, social presence, prioritized actions).
+4. [x] Post-signup activation map on the overview page, computed from real data.
+5. [x] End-to-end chat tests for all six employees in parallel — all produce real,
+       well-formatted Arabic deliverables; deliverable wording now matches the output kind.
+
+

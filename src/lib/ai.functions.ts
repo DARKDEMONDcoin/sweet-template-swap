@@ -603,10 +603,14 @@ export const askEmployee = createServerFn({ method: "POST" })
       reply = `${reply.trim()}\n\n— استندتُ إلى بيانات حقيقية: ${research.used.join(" · ")}`;
     }
 
-    // خطة متعددة المنشورات: كل منشور صار مخرجاً مستقلاً — نوجّه المستخدم إليها بدل محرّر نشر واحد.
+    // عدة مخرجات: كل مخرج مستقل — نوجّه المستخدم إليها بدل محرّر واحد.
     if (deliverables.length > 1) {
-      reply = `${reply.trim()}\n\n📋 جهّزت **${deliverables.length} منشورات** منفصلة، كل منشور بنصه ومنصته وموعده — راجعها واعتمدها من [المخرجات والمهام](/app/tasks).`;
+      const allPosts = deliverables.every((d) => Boolean(d.channel));
+      reply = allPosts
+        ? `${reply.trim()}\n\n📋 جهّزت **${deliverables.length} منشورات** منفصلة، كل منشور بنصه ومنصته وموعده — راجعها واعتمدها من [المخرجات والمهام](/app/tasks).`
+        : `${reply.trim()}\n\n📋 جهّزت **${deliverables.length} مخرجات** جاهزة، كل واحد بنصه الكامل — راجعها واعتمدها من [المخرجات والمهام](/app/tasks).`;
     }
+
 
     const { data: assistantRow, error: assistantError } = await supabase
       .from("messages")
