@@ -30,15 +30,11 @@ export async function publishToPlatform(
   const config = await pipedreamConfig();
   if (!config) throw missingConfigError();
 
-  const { data: account } = await admin
-    .from("pipedream_accounts")
-    .select("account_id")
-    .eq("workspace_id", params.workspaceId)
-    .eq("provider", params.provider)
-    .eq("status", "connected")
-    .maybeSingle();
+  const accountId = await resolveAccountId(admin, config, params.workspaceId, params.provider, app?.slug);
+  if (!accountId)
+    throw new Error(`${app?.label ?? params.provider} غير مربوط بعد — اربطه من صفحة التكاملات.`);
+  const account = { account_id: accountId };
 
-  if (!account) throw new Error(`${app?.label ?? params.provider} غير مربوط بعد — اربطه من صفحة التكاملات.`);
 
   // ميتا (إنستجرام/فيسبوك): ننشر عبر Graph API مباشرة من خلال وكيل Pipedream،
   // لأن الإجراءات الجاهزة لا تدعم النص الكامل مع الصورة على إنستجرام.
