@@ -22,9 +22,38 @@ export function normalizeArabic(text: string): string {
 }
 
 const STOP = new Set([
-  "في", "من", "على", "عن", "الى", "الي", "مع", "هذا", "هذه", "ذلك", "التي", "الذي", "او", "و",
-  "ما", "هل", "كل", "بعد", "قبل", "كان", "يكون", "هو", "هي", "ثم", "لكن", "اي", "the", "and",
-  "for", "with", "that", "this",
+  "في",
+  "من",
+  "على",
+  "عن",
+  "الى",
+  "الي",
+  "مع",
+  "هذا",
+  "هذه",
+  "ذلك",
+  "التي",
+  "الذي",
+  "او",
+  "و",
+  "ما",
+  "هل",
+  "كل",
+  "بعد",
+  "قبل",
+  "كان",
+  "يكون",
+  "هو",
+  "هي",
+  "ثم",
+  "لكن",
+  "اي",
+  "the",
+  "and",
+  "for",
+  "with",
+  "that",
+  "this",
 ]);
 
 /** بصمة نصية: كلمات + ثلاثيات حروف لتقاطع أعمق من المطابقة الحرفية. */
@@ -73,7 +102,10 @@ export function durableMemoryItems(items: DurableMemory[]): MemoryItem[] {
 
 /** استخراج محافظ للحقائق التي صرّح المستخدم بأنها دائمة؛ لا يخمّن حقائق من الطلبات العادية. */
 export function extractExplicitMemories(text: string): { kind: string; content: string }[] {
-  const lines = text.split(/[\n.!؟]+/).map((line) => line.trim()).filter(Boolean);
+  const lines = text
+    .split(/[\n.!؟]+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   const rules: Array<[RegExp, string]> = [
     [/^(?:تذكر|افتكر|احفظ|خلي بالك)(?:\s+(?:أن|ان))?\s*[:：-]?\s*(.+)$/i, "fact"],
     [/^(?:نفضل|أفضل|افضل|أحب|احب)\s+(.+)$/i, "preference"],
@@ -100,11 +132,7 @@ export type RankedMemory = MemoryItem & { score: number };
  * ترتيب عناصر الذاكرة حسب صلتها الدلالية بالطلب الحالي.
  * ترجع العناصر الأعلى صلة فقط، مع الإبقاء على العناصر الإلزامية (القواعد/النبرة) دائماً.
  */
-export function rankMemories(
-  items: MemoryItem[],
-  query: string,
-  limit = 8,
-): RankedMemory[] {
+export function rankMemories(items: MemoryItem[], query: string, limit = 8): RankedMemory[] {
   if (items.length <= limit) return items.map((i) => ({ ...i, score: 1 }));
 
   const docs = items.map((i) => features(`${i.title} ${i.body ?? ""} ${i.kind ?? ""}`));

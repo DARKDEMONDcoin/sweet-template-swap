@@ -62,9 +62,8 @@ export const startPipedreamConnect = createServerFn({ method: "POST" })
     const app = pipedreamApp(data.provider);
     if (!app) throw new Error("هذه المنصة لا تُدار عبر Pipedream.");
 
-    const { pipedreamConfig, createConnectToken, missingConfigError, pickScopeProfile } = await import(
-      "./pipedream.server"
-    );
+    const { pipedreamConfig, createConnectToken, missingConfigError, pickScopeProfile } =
+      await import("./pipedream.server");
     const config = await pipedreamConfig();
     if (!config) throw missingConfigError();
 
@@ -76,7 +75,10 @@ export const startPipedreamConnect = createServerFn({ method: "POST" })
       `https://pipedream.com/_static/connect.html?token=${encodeURIComponent(token.token)}`;
     const url = new URL(base);
     url.searchParams.set("app", app.slug);
-    url.searchParams.set("success_redirect_uri", `${origin}/app/integrations?pd=connected&provider=${data.provider}`);
+    url.searchParams.set(
+      "success_redirect_uri",
+      `${origin}/app/integrations?pd=connected&provider=${data.provider}`,
+    );
     url.searchParams.set("error_redirect_uri", `${origin}/app/integrations?pd=failed`);
 
     // ملف الصلاحيات المناسب للنشر (وإلا يفتح فيسبوك نافذة «قراءة فقط»).
@@ -99,7 +101,6 @@ export const startPipedreamConnect = createServerFn({ method: "POST" })
       /* الافتراضي: تطبيق الوسيط */
     }
 
-
     return { url: url.toString(), app: app.slug, label: app.label };
   });
 
@@ -109,7 +110,8 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => z.object({ workspaceId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
     const admin = await assertOwner(context.supabase, data.workspaceId);
-    const { pipedreamConfig, listAccounts, missingConfigError } = await import("./pipedream.server");
+    const { pipedreamConfig, listAccounts, missingConfigError } =
+      await import("./pipedream.server");
     const { pipedreamApps } = await import("@/data/pipedream-apps");
     const config = await pipedreamConfig();
     if (!config) throw missingConfigError();
@@ -120,8 +122,7 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
     const seen: string[] = [];
     const warnings: { provider: string; message: string }[] = [];
     for (const account of accounts) {
-      const slug =
-        typeof account.app === "string" ? account.app : (account.app?.name_slug ?? "");
+      const slug = typeof account.app === "string" ? account.app : (account.app?.name_slug ?? "");
       const provider = slugToProvider.get(slug);
       if (!provider) continue;
       seen.push(provider);
@@ -130,7 +131,8 @@ export const syncPipedreamAccounts = createServerFn({ method: "POST" })
       let scopeError: string | null = null;
       if ((provider === "facebook" || provider === "instagram") && account.healthy !== false) {
         try {
-          const { metaPermissions, META_PUBLISH_SCOPES, missingMetaScopesMessage } = await import("./social-inbox.server");
+          const { metaPermissions, META_PUBLISH_SCOPES, missingMetaScopesMessage } =
+            await import("./social-inbox.server");
           const granted = await metaPermissions(config, data.workspaceId, account.id);
           const missing = META_PUBLISH_SCOPES.filter((s) => !granted.includes(s));
           if (missing.length) scopeError = missingMetaScopesMessage(provider, missing);

@@ -60,7 +60,10 @@ export async function assertMetaPublishScopes(
   throw new Error(missingMetaScopesMessage(provider, missing));
 }
 
-export function missingMetaScopesMessage(provider: "facebook" | "instagram", missing: string[]): string {
+export function missingMetaScopesMessage(
+  provider: "facebook" | "instagram",
+  missing: string[],
+): string {
   const name = provider === "facebook" ? "فيسبوك" : "إنستجرام";
   return (
     `${name} منح صلاحية عرض الصفحات فقط ولم يمنح صلاحية النشر (${missing.join("، ")}). ` +
@@ -83,8 +86,9 @@ export async function pageTarget(
     url: `${GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=5`,
   });
   const page =
-    (preferredPageId ? res.data?.find((candidate) => candidate.id === preferredPageId) : undefined) ??
-    res.data?.[0];
+    (preferredPageId
+      ? res.data?.find((candidate) => candidate.id === preferredPageId)
+      : undefined) ?? res.data?.[0];
   if (!page?.access_token) return null;
   return {
     id: page.id,
@@ -209,7 +213,9 @@ type Conversations = {
     id: string;
     updated_time?: string;
     participants?: { data?: { id: string; name?: string }[] };
-    messages?: { data?: { message?: string; created_time?: string; from?: { id: string; name?: string } }[] };
+    messages?: {
+      data?: { message?: string; created_time?: string; from?: { id: string; name?: string } }[];
+    };
   }[];
 };
 
@@ -310,10 +316,7 @@ export async function replyToMessenger(
 }
 
 /** ملخّص نصي موجز للتعليقات والرسائل يُمرّر للموظف كسياق إلزامي. */
-export function inboxSummary(
-  comments: InboxComment[],
-  messages: InboxMessage[],
-): string {
+export function inboxSummary(comments: InboxComment[], messages: InboxMessage[]): string {
   const lines: string[] = [];
   const pending = comments.filter((c) => !c.answered).slice(0, 12);
   if (pending.length) {
@@ -326,7 +329,9 @@ export function inboxSummary(
   if (waiting.length) {
     lines.push("رسائل بانتظار رد:");
     for (const m of waiting) {
-      lines.push(`- [${m.participantId}] ${m.participant}: ${m.lastMessage.slice(0, 160)} (${m.updatedAt})`);
+      lines.push(
+        `- [${m.participantId}] ${m.participant}: ${m.lastMessage.slice(0, 160)} (${m.updatedAt})`,
+      );
     }
   }
   return lines.join("\n");
