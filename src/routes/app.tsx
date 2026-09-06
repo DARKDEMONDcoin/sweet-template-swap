@@ -8,7 +8,7 @@ import { guestSession } from "@/lib/guest.functions";
  * فتح جلسة التجربة مرة واحدة فقط لكل تبويب: عدة نداءات متوازية (فتح أكثر من صفحة
  * في نفس اللحظة) كانت تُبطل رمز الدخول السابق فيظهر خطأ 403.
  */
-let guestLogin: Promise<{ id: string } & Record<string, unknown>> | null = null;
+let guestLogin: ReturnType<typeof openGuestSession> | null = null;
 
 async function openGuestSession() {
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/app")({
     if (data.user) return { user: data.user };
 
     // لا تسجيل: نفتح جلسة تجربة تلقائياً (نداء واحد مشترك لكل المحاولات المتوازية).
-    guestLogin ??= openGuestSession() as Promise<{ id: string } & Record<string, unknown>>;
+    guestLogin ??= openGuestSession();
     try {
       const user = await guestLogin;
       return { user };
