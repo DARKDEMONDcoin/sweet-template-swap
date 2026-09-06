@@ -377,7 +377,19 @@ function ChatPage() {
 
   const send = useMutation({
     mutationFn: (message: string) =>
-      ask({ data: { workspaceId: workspace!.id, employeeId: id, conversationId: conversationId!, message } }),
+      ask({
+        data: {
+          workspaceId: workspace!.id,
+          employeeId: id,
+          conversationId: conversationId!,
+          message,
+          attachments,
+          imageMode,
+          imagePrompt: imagePrompt.trim() || undefined,
+          imageAspect: aspect,
+        },
+      }),
+
     onSuccess: async (res) => {
       await qc.invalidateQueries({ queryKey: ["messages", workspace?.id, id, conversationId] });
       setPending(null);
