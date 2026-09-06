@@ -14,7 +14,6 @@ import {
 } from "@/lib/nour-run.server";
 import { employeeDirectory, sharedSystemBlocks, type EmployeeId } from "@/lib/team-knowledge";
 
-
 type Deliverable = {
   title?: string;
   kind?: string;
@@ -43,47 +42,70 @@ export const askEmployee = createServerFn({ method: "POST" })
     // المفاتيح تُقرأ داخل freeChat من جدول app_secrets في Supabase.
     const apiKey = "";
 
-
     const supabase = context.supabase;
     const persona = personas[data.employeeId];
     if (!persona) throw new Error("موظف غير معروف.");
 
-    const [{ data: workspace }, { data: conversation }, { data: brain }, { data: durable }, { data: history }, { data: linked }, { data: direct }, { data: recentTasks }] =
-      await Promise.all([
-        supabase.from("workspaces").select("*").eq("id", data.workspaceId).maybeSingle(),
-        supabase.from("conversations").select("id, title").eq("id", data.conversationId).eq("workspace_id", data.workspaceId).eq("employee_id", data.employeeId).maybeSingle(),
-        supabase.from("brain_items").select("title, body, kind").eq("workspace_id", data.workspaceId),
-        supabase.from("brand_memories").select("content, kind").eq("workspace_id", data.workspaceId).is("superseded_by", null).or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`).order("updated_at", { ascending: false }).limit(80),
-        supabase
-          .from("messages")
-          .select("role, body")
-          .eq("workspace_id", data.workspaceId)
-          .eq("employee_id", data.employeeId)
-          .eq("conversation_id", data.conversationId)
-          .order("created_at", { ascending: false })
-          .limit(12),
-        supabase
-          .from("pipedream_accounts")
-          .select("provider")
-          .eq("workspace_id", data.workspaceId)
-          .eq("status", "connected"),
-        supabase
-          .from("integrations")
-          .select("provider")
-          .eq("workspace_id", data.workspaceId)
-          .eq("status", "connected"),
-        // ما أنجزه الزملاء مؤخراً — حتى يعرف كل موظف ما يجري في الفريق.
-        supabase
-          .from("tasks")
-          .select("employee_id, title, status, created_at")
-          .eq("workspace_id", data.workspaceId)
-          .order("created_at", { ascending: false })
-          .limit(8),
-      ]);
+    const [
+      { data: workspace },
+      { data: conversation },
+      { data: brain },
+      { data: durable },
+      { data: history },
+      { data: linked },
+      { data: direct },
+      { data: recentTasks },
+    ] = await Promise.all([
+      supabase.from("workspaces").select("*").eq("id", data.workspaceId).maybeSingle(),
+      supabase
+        .from("conversations")
+        .select("id, title")
+        .eq("id", data.conversationId)
+        .eq("workspace_id", data.workspaceId)
+        .eq("employee_id", data.employeeId)
+        .maybeSingle(),
+      supabase.from("brain_items").select("title, body, kind").eq("workspace_id", data.workspaceId),
+      supabase
+        .from("brand_memories")
+        .select("content, kind")
+        .eq("workspace_id", data.workspaceId)
+        .is("superseded_by", null)
+        .or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`)
+        .order("updated_at", { ascending: false })
+        .limit(80),
+      supabase
+        .from("messages")
+        .select("role, body")
+        .eq("workspace_id", data.workspaceId)
+        .eq("employee_id", data.employeeId)
+        .eq("conversation_id", data.conversationId)
+        .order("created_at", { ascending: false })
+        .limit(12),
+      supabase
+        .from("pipedream_accounts")
+        .select("provider")
+        .eq("workspace_id", data.workspaceId)
+        .eq("status", "connected"),
+      supabase
+        .from("integrations")
+        .select("provider")
+        .eq("workspace_id", data.workspaceId)
+        .eq("status", "connected"),
+      // ما أنجزه الزملاء مؤخراً — حتى يعرف كل موظف ما يجري في الفريق.
+      supabase
+        .from("tasks")
+        .select("employee_id, title, status, created_at")
+        .eq("workspace_id", data.workspaceId)
+        .order("created_at", { ascending: false })
+        .limit(8),
+    ]);
 
     // حالة الربط الحقيقية تُحقن في التعليمات حتى لا يدّعي الموظف نشراً مستحيلاً.
     const connected = [
-      ...new Set([...(linked ?? []).map((a) => a.provider), ...(direct ?? []).map((i) => i.provider)]),
+      ...new Set([
+        ...(linked ?? []).map((a) => a.provider),
+        ...(direct ?? []).map((i) => i.provider),
+      ]),
     ];
 
     if (!workspace) throw new Error("مساحة العمل غير موجودة.");
@@ -94,38 +116,56 @@ export const askEmployee = createServerFn({ method: "POST" })
       country?: string | null;
     };
 
-    const { data: userRow, error: insertUserError } = await supabase.from("messages").insert({
-      workspace_id: data.workspaceId,
-      employee_id: data.employeeId,
-      role: "user",
-      body: data.message,
-      conversation_id: data.conversationId,
-    }).select("id").single();
+    const { data: userRow, error: insertUserError } = await supabase
+      .from("messages")
+      .insert({
+        workspace_id: data.workspaceId,
+        employee_id: data.employeeId,
+        role: "user",
+        body: data.message,
+        conversation_id: data.conversationId,
+      })
+      .select("id")
+      .single();
     if (insertUserError) throw new Error(insertUserError.message);
 
-    const { durableMemoryItems, extractExplicitMemories, memoryBlock } = await import("./memory.server");
-    const brainText = memoryBlock([...(brain ?? []), ...durableMemoryItems(durable ?? [])], data.message, 10);
+    const { durableMemoryItems, extractExplicitMemories, memoryBlock } =
+      await import("./memory.server");
+    const brainText = memoryBlock(
+      [...(brain ?? []), ...durableMemoryItems(durable ?? [])],
+      data.message,
+      10,
+    );
     const extracted = extractExplicitMemories(data.message);
     if (extracted.length) {
-      await supabase.from("brand_memories").insert(extracted.map((item) => ({
-        workspace_id: data.workspaceId,
-        conversation_id: data.conversationId,
-        employee_id: data.employeeId,
-        source_message_id: userRow?.id ?? null,
-        kind: item.kind,
-        content: item.content,
-        confidence: 1,
-      })));
+      await supabase.from("brand_memories").insert(
+        extracted.map((item) => ({
+          workspace_id: data.workspaceId,
+          conversation_id: data.conversationId,
+          employee_id: data.employeeId,
+          source_message_id: userRow?.id ?? null,
+          kind: item.kind,
+          content: item.content,
+          confidence: 1,
+        })),
+      );
     }
     if (conversation.title === "محادثة جديدة") {
-      await supabase.from("conversations").update({ title: data.message.replace(/\s+/g, " ").slice(0, 55) }).eq("id", data.conversationId);
+      await supabase
+        .from("conversations")
+        .update({ title: data.message.replace(/\s+/g, " ").slice(0, 55) })
+        .eq("id", data.conversationId);
     } else {
-      await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", data.conversationId);
+      await supabase
+        .from("conversations")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", data.conversationId);
     }
 
     const longForm =
-      /مقال|خطة\s*(سيو|محتوى|تسويق)|\d{3,4}\s*كلمة|صفحة هبوط|دليل شامل|حملة كاملة/.test(data.message) ||
-      data.message.length > 220;
+      /مقال|خطة\s*(سيو|محتوى|تسويق)|\d{3,4}\s*كلمة|صفحة هبوط|دليل شامل|حملة كاملة/.test(
+        data.message,
+      ) || data.message.length > 220;
 
     const research = await researchFor(
       data.employeeId,
@@ -145,7 +185,12 @@ export const askEmployee = createServerFn({ method: "POST" })
         `اجعل "channel" في المخرج هو "${askedTargets[0]}" حرفياً، وكيّف النص لقواعد هذه المنصة (الطول، النبرة، الهاشتاقات). ` +
         `لا تقترح منصة أخرى بدلاً منها. ` +
         (askedTargets.some((p) => !connected.includes(p))
-          ? `تنبيه: ${askedTargets.filter((p) => !connected.includes(p)).map(providerLabel).join(" و")} غير مربوط بعد — أنجز المخرج كاملاً، وضع في needs_connection المنصة "${askedTargets.find((p) => !connected.includes(p))}" بسبب قصير.`
+          ? `تنبيه: ${askedTargets
+              .filter((p) => !connected.includes(p))
+              .map(providerLabel)
+              .join(
+                " و",
+              )} غير مربوط بعد — أنجز المخرج كاملاً، وضع في needs_connection المنصة "${askedTargets.find((p) => !connected.includes(p))}" بسبب قصير.`
           : `هذه المنصة مربوطة — أنجز المخرج جاهزاً للنشر عليها مباشرة.`)
       : "";
 
@@ -248,50 +293,74 @@ export const askEmployee = createServerFn({ method: "POST" })
     // محاولة إصلاح واحدة فقط للمخرجات الطويلة التي لم تُرجع JSON صالحاً أو مخرجاً كاملاً.
     if (longForm && (!raw.trim().startsWith("{") || !/"reply"\s*:/.test(raw))) {
       try {
-        raw = await freeChat(apiKey, [
-          { role: "system", content: system },
-          { role: "user", content: data.message },
-          { role: "assistant", content: raw },
-          {
-            role: "user",
-            content: "راجع المسودة مرة واحدة وفق معايير القبول، وأصلح النقص أو القطع فقط. أعد JSON صالحاً كاملاً بنفس البنية المطلوبة دون شرح خارجي.",
-          },
-        ], { json: true, timeoutMs: 40_000, maxTokens: 6000, budgetMs: 55_000 });
+        raw = await freeChat(
+          apiKey,
+          [
+            { role: "system", content: system },
+            { role: "user", content: data.message },
+            { role: "assistant", content: raw },
+            {
+              role: "user",
+              content:
+                "راجع المسودة مرة واحدة وفق معايير القبول، وأصلح النقص أو القطع فقط. أعد JSON صالحاً كاملاً بنفس البنية المطلوبة دون شرح خارجي.",
+            },
+          ],
+          { json: true, timeoutMs: 40_000, maxTokens: 6000, budgetMs: 55_000 },
+        );
       } catch (error) {
         console.warn("[chat] repair pass skipped:", error instanceof Error ? error.message : error);
       }
     }
 
     try {
-      const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+      const cleaned = raw
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/```\s*$/i, "")
+        .trim();
       const parsed: unknown = JSON.parse(cleaned);
       // النموذج قد يعيد كائناً واحداً أو مصفوفة كائنات — نتعامل مع الحالتين.
       const items = (Array.isArray(parsed) ? parsed : [parsed]).filter(
-        (x): x is { reply?: string; deliverable?: Deliverable | null; needs_connection?: NeedsConnection } =>
-          Boolean(x) && typeof x === "object",
+        (
+          x,
+        ): x is {
+          reply?: string;
+          deliverable?: Deliverable | null;
+          needs_connection?: NeedsConnection;
+        } => Boolean(x) && typeof x === "object",
       );
-      const replies = items.map((x) => (typeof x.reply === "string" ? x.reply.trim() : "")).filter(Boolean);
+      const replies = items
+        .map((x) => (typeof x.reply === "string" ? x.reply.trim() : ""))
+        .filter(Boolean);
       deliverables = items
         .map((x) => x.deliverable)
         .filter((d): d is Deliverable => Boolean(d?.title && d.body))
         .map((d) => (askedTargets[0] ? { ...d, channel: askedTargets[0] } : d));
-      const nc = items.map((x) => x.needs_connection).find((n) => n && typeof n === "object" && typeof n.provider === "string");
+      const nc = items
+        .map((x) => x.needs_connection)
+        .find((n) => n && typeof n === "object" && typeof n.provider === "string");
       // لا نعرض زر ربط لحساب مربوط فعلاً أو لمنصة لا تخص هذا الموظف.
       if (nc && !connected.includes(nc.provider)) {
-        const allowed = employeeDirectory[data.employeeId as EmployeeId]?.integrations.some((i) => i.provider === nc.provider);
-        if (allowed) needsConnection = { provider: nc.provider, reason: String(nc.reason ?? "").slice(0, 160) };
+        const allowed = employeeDirectory[data.employeeId as EmployeeId]?.integrations.some(
+          (i) => i.provider === nc.provider,
+        );
+        if (allowed)
+          needsConnection = {
+            provider: nc.provider,
+            reason: String(nc.reason ?? "").slice(0, 160),
+          };
       }
       // إن طلب المستخدم منصة غير مربوطة ولم يذكرها النموذج، نطلب ربطها نحن.
       const askedMissing = askedTargets.find((p) => !connected.includes(p));
       if (!needsConnection && askedMissing && deliverables.length) {
-        needsConnection = { provider: askedMissing, reason: `طلبت النشر على ${providerLabel(askedMissing)}` };
+        needsConnection = {
+          provider: askedMissing,
+          reason: `طلبت النشر على ${providerLabel(askedMissing)}`,
+        };
       }
       if (replies.length) {
         reply = replies.join("\n\n");
       } else if (deliverables.length) {
-        reply = deliverables
-          .map((d) => `### ${d.title}\n\n${d.body}`)
-          .join("\n\n---\n\n");
+        reply = deliverables.map((d) => `### ${d.title}\n\n${d.body}`).join("\n\n---\n\n");
       }
     } catch {
       deliverables = [];
@@ -310,19 +379,27 @@ export const askEmployee = createServerFn({ method: "POST" })
     let imageUrl: string | null = null;
     if (VISUAL_EMPLOYEES.has(data.employeeId)) {
       try {
-        const { ownedHeroImage, extractImagePrompt, imageBrief } = await import("./image-gen.server");
-        const fromField = deliverables.map((d) => d.image_prompt).find((p) => typeof p === "string" && p.trim().length > 30);
+        const { ownedHeroImage, extractImagePrompt, imageBrief } =
+          await import("./image-gen.server");
+        const fromField = deliverables
+          .map((d) => d.image_prompt)
+          .find((p) => typeof p === "string" && p.trim().length > 30);
         const draft =
           (fromField ? fromField.trim() : null) ??
           extractImagePrompt(`${reply}\n${deliverables.map((d) => d.body ?? "").join("\n")}`);
-        const wantsVisual = Boolean(draft) || deliverables.some((d) => d.body && d.body.length > 80);
+        const wantsVisual =
+          Boolean(draft) || deliverables.some((d) => d.body && d.body.length > 80);
         if (wantsVisual) {
           // «مخرج صور»: الوصف يُشتق من طلب المستخدم نفسه ومن المخرج، حتى تعكس الصورة الموضوع فعلاً.
           const prompt = await imageBrief({
             request: data.message,
             title: deliverables[0]?.title ?? null,
             body: deliverables[0]?.body ?? reply,
-            brand: { name: workspace?.name, industry: workspace?.industry, country: workspace?.country ?? null },
+            brand: {
+              name: workspace?.name,
+              industry: workspace?.industry,
+              country: workspace?.country ?? null,
+            },
             draft,
           });
           imageUrl = await ownedHeroImage(
@@ -335,7 +412,6 @@ export const askEmployee = createServerFn({ method: "POST" })
         console.error("[chat] image generation failed:", error);
       }
     }
-
 
     reply = sanitizeActionClaims(reply, connected);
     const footers = toolBlocks.map((t) => t.footer).filter(Boolean);
@@ -365,7 +441,9 @@ export const askEmployee = createServerFn({ method: "POST" })
 
     let createdTaskId: string | null = null;
     for (const deliverable of deliverables) {
-      const output = imageUrl ? `![${deliverable.title}](${imageUrl})\n\n${deliverable.body!}` : deliverable.body!;
+      const output = imageUrl
+        ? `![${deliverable.title}](${imageUrl})\n\n${deliverable.body!}`
+        : deliverable.body!;
       const { data: task } = await supabase
         .from("tasks")
         .insert({
@@ -389,7 +467,6 @@ export const askEmployee = createServerFn({ method: "POST" })
         .single();
       createdTaskId = createdTaskId ?? task?.id ?? null;
     }
-
 
     return { reply, messageId: assistantRow.id, createdTaskId, needsConnection, imageUrl };
   });
@@ -416,4 +493,3 @@ export const runSkill = createServerFn({ method: "POST" })
     });
     return { output: run.output, messageId: run.messageId, taskId: run.taskId };
   });
-

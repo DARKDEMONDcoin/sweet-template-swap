@@ -50,16 +50,25 @@ export const uploadSocialMedia = createServerFn({ method: "POST" })
     const file = input.get("file");
     if (!(file instanceof File)) throw new Error("لم يُرفق ملف.");
     if (file.size > MAX_UPLOAD) throw new Error("حجم الملف أكبر من ٥٠ ميجابايت.");
-    const kind = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "image" : null;
+    const kind = file.type.startsWith("video/")
+      ? "video"
+      : file.type.startsWith("image/")
+        ? "image"
+        : null;
     if (!kind) throw new Error("يُقبل فقط صور (JPG/PNG/WebP) أو فيديو (MP4/MOV).");
     return { workspaceId, file, kind } as const;
   })
   .handler(async ({ data, context }) => {
     const admin = await assertOwner(context.supabase, data.workspaceId);
-    const ext = (data.file.name.split(".").pop() ?? (data.kind === "video" ? "mp4" : "jpg")).toLowerCase().slice(0, 5);
+    const ext = (data.file.name.split(".").pop() ?? (data.kind === "video" ? "mp4" : "jpg"))
+      .toLowerCase()
+      .slice(0, 5);
     const path = `${data.workspaceId}/uploads/${crypto.randomUUID()}.${ext}`;
     const bucket = admin.storage.from("nour-media");
-    const { error } = await bucket.upload(path, data.file, { contentType: data.file.type, upsert: false });
+    const { error } = await bucket.upload(path, data.file, {
+      contentType: data.file.type,
+      upsert: false,
+    });
     if (error) throw new Error(`تعذّر رفع الملف: ${error.message}`);
     const { data: signed } = await bucket.createSignedUrl(path, 60 * 60 * 24 * 365 * 5);
     if (!signed?.signedUrl) throw new Error("تعذّر إنشاء رابط الملف.");
@@ -109,9 +118,7 @@ export const scheduleSocialPost = createServerFn({ method: "POST" })
 /** ينشر الآن: يضيف المنشور ثم ينفّذه فوراً بنفس نواة الطابور. */
 export const publishSocialNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
-    scheduleInput.omit({ scheduledAt: true }).parse(input),
-  )
+  .inputValidator((input: unknown) => scheduleInput.omit({ scheduledAt: true }).parse(input))
   .handler(async ({ data, context }) => {
     const admin = await assertOwner(context.supabase, data.workspaceId);
     const { data: row, error } = await admin
@@ -179,7 +186,12 @@ export const updateSocialPost = createServerFn({ method: "POST" })
 
     const { data: retried, error: retryError } = await admin
       .from("social_posts")
-      .update({ status: "scheduled", attempts: 0, locked_at: new Date().toISOString(), last_error: null })
+      .update({
+        status: "scheduled",
+        attempts: 0,
+        locked_at: new Date().toISOString(),
+        last_error: null,
+      })
       .eq("id", data.id)
       .eq("workspace_id", data.workspaceId)
       .neq("status", "published")

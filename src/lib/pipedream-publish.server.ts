@@ -6,7 +6,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/integrations/supabase/types";
 import { pipedreamApp } from "@/data/pipedream-apps";
-import { pipedreamConfig, runAction, proxyRequest, missingConfigError, listAccounts, type PipedreamConfig } from "./pipedream.server";
+import {
+  pipedreamConfig,
+  runAction,
+  proxyRequest,
+  missingConfigError,
+  listAccounts,
+  type PipedreamConfig,
+} from "./pipedream.server";
 import { assertMetaPublishScopes, pageTarget } from "./social-inbox.server";
 
 type Admin = SupabaseClient<Database>;
@@ -73,10 +80,15 @@ async function resolveAccountId(
   return account.id;
 }
 
-
 export async function publishToPlatform(
   admin: Admin,
-  params: { workspaceId: string; provider: string; text: string; imageUrl?: string; videoUrl?: string },
+  params: {
+    workspaceId: string;
+    provider: string;
+    text: string;
+    imageUrl?: string;
+    videoUrl?: string;
+  },
 ): Promise<PublishResult> {
   const app = pipedreamApp(params.provider);
   const metaProxy = params.provider === "instagram" || params.provider === "facebook";
@@ -87,11 +99,16 @@ export async function publishToPlatform(
   const config = await pipedreamConfig();
   if (!config) throw missingConfigError();
 
-  const accountId = await resolveAccountId(admin, config, params.workspaceId, params.provider, app?.slug);
+  const accountId = await resolveAccountId(
+    admin,
+    config,
+    params.workspaceId,
+    params.provider,
+    app?.slug,
+  );
   if (!accountId)
     throw new Error(`${app?.label ?? params.provider} غير مربوط بعد — اربطه من صفحة التكاملات.`);
   const account = { account_id: accountId };
-
 
   // ميتا (إنستجرام/فيسبوك): ننشر عبر Graph API مباشرة من خلال وكيل Pipedream،
   // لأن الإجراءات الجاهزة لا تدعم النص الكامل مع الصورة على إنستجرام.
@@ -112,12 +129,14 @@ export async function publishToPlatform(
     throw new Error(`النشر المباشر غير متاح بعد على ${params.provider}.`);
   }
 
-
   const props: Record<string, unknown> = {
     [app.accountProp]: { authProvisionId: account.account_id },
     ...textProps(params.provider, params.text),
   };
-  if (params.videoUrl) throw new Error(`نشر الفيديو متاح حالياً على فيسبوك وإنستجرام فقط — على ${app.label} انشر نصاً أو صورة.`);
+  if (params.videoUrl)
+    throw new Error(
+      `نشر الفيديو متاح حالياً على فيسبوك وإنستجرام فقط — على ${app.label} انشر نصاً أو صورة.`,
+    );
   if (params.imageUrl) Object.assign(props, imageProps(params.provider, params.imageUrl));
 
   const result = await runAction(config, {
@@ -128,7 +147,6 @@ export async function publishToPlatform(
 
   return { provider: params.provider, accountId: account.account_id, result };
 }
-
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -153,7 +171,10 @@ async function publishMeta(
     .eq("account_id", accountId)
     .limit(1);
   const page = await pageTarget(config, workspaceId, accountId, link?.[0]?.page_id ?? undefined);
-  if (!page) throw new Error("تعذّر تحديد الصفحة المرتبطة بحسابك على ميتا — تأكد أنك مسؤول عن الصفحة ثم أعد الربط.");
+  if (!page)
+    throw new Error(
+      "تعذّر تحديد الصفحة المرتبطة بحسابك على ميتا — تأكد أنك مسؤول عن الصفحة ثم أعد الربط.",
+    );
   if (!link?.[0]?.page_id) {
     const { error: pageSaveError } = await admin
       .from("pipedream_accounts")
@@ -161,7 +182,8 @@ async function publishMeta(
       .eq("workspace_id", workspaceId)
       .eq("provider", provider)
       .eq("account_id", accountId);
-    if (pageSaveError) console.error("[publish] failed to persist Meta page selection", pageSaveError);
+    if (pageSaveError)
+      console.error("[publish] failed to persist Meta page selection", pageSaveError);
   }
 
   if (provider === "facebook") {
@@ -228,7 +250,8 @@ async function publishMeta(
         url: `${GRAPH}/${container.id}?fields=status_code&access_token=${page.token}`,
       });
       if (st.status_code === "FINISHED") break;
-      if (st.status_code === "ERROR") throw new Error("إنستجرام رفض الفيديو — استخدم MP4 عمودياً (9:16) أقل من ٩٠ ثانية.");
+      if (st.status_code === "ERROR")
+        throw new Error("إنستجرام رفض الفيديو — استخدم MP4 عمودياً (9:16) أقل من ٩٠ ثانية.");
     }
   }
 
