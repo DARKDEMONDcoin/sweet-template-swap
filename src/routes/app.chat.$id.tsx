@@ -18,6 +18,8 @@ import { requestedPublishTargets } from "@/lib/platforms";
 import { PublishToWordPress } from "@/components/app/PublishToWordPress";
 import { ActionPanel } from "@/components/app/ActionPanel";
 import { Portrait } from "@/components/site/Portrait";
+import { MediaStudio, type Attachment, type ImageMode, type Aspect } from "@/components/app/MediaStudio";
+
 
 import { featuredSkillsFor, skillsFor, type Skill } from "@/data/skills";
 import { cn } from "@/lib/utils";
