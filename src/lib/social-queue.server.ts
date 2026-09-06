@@ -59,7 +59,7 @@ export async function publishQueuedPost(admin: Admin, id: string): Promise<Queue
       provider: post.provider,
       text: post.body,
       ...(post.image_url ? { imageUrl: post.image_url } : {}),
-      ...(videoOf(post.meta) ? { videoUrl: videoOf(post.meta)! } : {}),
+      ...(videoOf(post.meta) ? { videoUrl: videoOf(post.meta) ?? undefined } : {}),
     });
 
     await admin
@@ -88,6 +88,9 @@ export async function publishQueuedPost(admin: Admin, id: string): Promise<Queue
         status: exhausted ? "failed" : "scheduled",
         attempts,
         locked_at: null,
+        scheduled_at: exhausted
+          ? post.scheduled_at
+          : new Date(Date.now() + attempts * 2 * 60 * 1000).toISOString(),
         last_error: message.slice(0, 500),
       })
       .eq("id", post.id);

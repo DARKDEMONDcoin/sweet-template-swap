@@ -50,11 +50,16 @@ export const Route = createFileRoute("/api/public/pipedream-webhook")({
         const kind = (payload.event ?? payload.event_type ?? "").toUpperCase();
 
         if (kind.includes("DELET") || kind.includes("DISCONNECT")) {
-          await supabaseAdmin
+          const { error: deleteError } = await supabaseAdmin
             .from("pipedream_accounts")
             .delete()
             .eq("workspace_id", workspaceId)
+            .eq("provider", provider)
             .eq("account_id", accountId);
+          if (deleteError) {
+            console.error("[pipedream-webhook] account delete failed", deleteError);
+            return new Response("Temporary failure", { status: 500 });
+          }
           await supabaseAdmin
             .from("integrations")
             .update({ status: "disconnected", account: null })
@@ -64,7 +69,7 @@ export const Route = createFileRoute("/api/public/pipedream-webhook")({
         }
 
         const healthy = payload.account?.healthy !== false && !kind.includes("ERROR");
-        await supabaseAdmin.from("pipedream_accounts").upsert(
+        const { error: upsertError } = await supabaseAdmin.from("pipedream_accounts").upsert(
           {
             workspace_id: workspaceId,
             provider,
@@ -77,6 +82,10 @@ export const Route = createFileRoute("/api/public/pipedream-webhook")({
           },
           { onConflict: "workspace_id,provider,account_id" },
         );
+        if (upsertError) {
+          console.error("[pipedream-webhook] account upsert failed", upsertError);
+          return new Response("Temporary failure", { status: 500 });
+        }
         await supabaseAdmin
           .from("integrations")
           .update({
