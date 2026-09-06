@@ -100,6 +100,50 @@ export async function imageBrief(input: ImageBriefInput): Promise<string> {
   }
 }
 
+/**
+ * «وصف المستخدم حرفياً»: يترجم وصف المستخدم العربي إلى إنجليزية تصويرية دون
+ * إضافة أي عنصر لم يذكره — هذا ما يجعل الصورة مطابقة لما كتبه بالضبط.
+ */
+export async function literalBrief(userPrompt: string): Promise<string> {
+  const trimmed = userPrompt.replace(/\s+/g, " ").trim().slice(0, 700);
+  // وصف إنجليزي بالفعل: يُستخدم كما هو بلا أي تدخل.
+  if (!/[\u0600-\u06FF]/.test(trimmed)) return trimmed.slice(0, 850) + NO_TEXT;
+  try {
+    const { freeChat } = await import("./nour-research.server");
+    const raw = await freeChat(
+      "",
+      [
+        {
+          role: "system",
+          content:
+            "Translate the user's Arabic image description into ONE faithful English image-generation prompt. Rules: keep EVERY element the user mentioned (subject, colors, place, style, mood, composition); add NOTHING new except neutral photographic quality words (lighting, sharpness, resolution). Never change the subject. Output the prompt only.",
+        },
+        { role: "user", content: trimmed },
+      ],
+      { timeoutMs: 12_000, maxTokens: 180, budgetMs: 14_000, race: true },
+    );
+    const clean = raw
+      .replace(/^```[a-z]*\n?|```$/gim, "")
+      .replace(/^(prompt|image prompt)\s*[:：]\s*/i, "")
+      .replace(/[\u0600-\u06FF]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (clean.length < 20) return `${trimmed}. Photorealistic, high detail, 8k.` + NO_TEXT;
+    return clean.slice(0, 850) + NO_TEXT;
+  } catch {
+    return `${trimmed}. Photorealistic, high detail, 8k.` + NO_TEXT;
+  }
+}
+
+/** أبعاد الصورة حسب النسبة المطلوبة من المستخدم. */
+export function aspectSize(aspect: "square" | "portrait" | "landscape" | "story") {
+  if (aspect === "square") return { width: 1024, height: 1024 };
+  if (aspect === "portrait") return { width: 896, height: 1152 };
+  if (aspect === "story") return { width: 768, height: 1344 };
+  return { width: 1216, height: 640 };
+}
+
+
 /** يولّد الصورة فعلياً ويعيد بايتاتها (للرفع إلى التخزين أو النشر إلى ووردبريس). */
 export async function generateImageBytes(
   prompt: string,
